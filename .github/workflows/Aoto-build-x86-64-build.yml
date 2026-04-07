@@ -4,7 +4,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
-  workflow_dispatch: # 保留手動觸發
+  workflow_dispatch:
     inputs:
       openwrt_version:
         description: '選擇版本 (或輸入 latest)'
@@ -12,7 +12,7 @@ on:
         default: 'latest'
         type: string
   schedule:
-    - cron: '0 0 * * *' # 💡 每天午夜 00:00 自動執行檢查
+    - cron: '0 0 * * *'
 
 jobs:
   check_and_build:
@@ -24,24 +24,37 @@ jobs:
       - name: 🔍 檢測官方與本地版本是否一致
         id: check_version
         run: |
-          # 1. 獲取官方最新穩定版號 (例如: 25.12.2)
+          INPUT_VER="${{ inputs.openwrt_version }}"
+          EVENT_NAME="${{ github.event_name }}"
+          
+          # 1. 獲取官方最新穩定版號
           OFFICIAL_LATEST=$(curl -s "https://api.github.com/repos/openwrt/openwrt/releases" | grep '"tag_name":' | grep -v 'rc' | head -n 1 | cut -d '"' -f 4 | sed 's/v//')
           
-          # 2. 獲取你自己倉庫最後一次 Release 的 OpenWrt 版本號
-          # 我們從 Release 的標題或描述中提取上次編譯的版本
+          # 2. 獲取本地最後發布
           MY_LATEST=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | grep '"name":' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || echo "0.0.0")
 
           echo "官方最新版本: $OFFICIAL_LATEST"
           echo "本地最後發布: $MY_LATEST"
 
-          # 3. 判斷邏輯
-          if [ "$OFFICIAL_LATEST" != "$MY_LATEST" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "需要更新！將開始編譯版本: $OFFICIAL_LATEST"
-            echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
+          # 3. 智慧判斷邏輯
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            echo "手動觸發模式！強制執行編譯。"
             echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
+            if [ -z "$INPUT_VER" ] || [ "$INPUT_VER" == "latest" ]; then
+              echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
+            else
+              echo "OWRT_VERSION=$INPUT_VER" >> $GITHUB_ENV
+            fi
           else
-            echo "版本一致，無需更新。"
-            echo "SHOULD_BUILD=false" >> $GITHUB_OUTPUT
+            echo "定時檢查模式！"
+            if [ "$OFFICIAL_LATEST" != "$MY_LATEST" ]; then
+              echo "發現新版本！準備更新..."
+              echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
+              echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
+            else
+              echo "版本一致，無需更新。任務終止。"
+              echo "SHOULD_BUILD=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: 安裝編譯依賴
@@ -60,12 +73,19 @@ jobs:
       - name: 運行編譯腳本
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         env:
-          ROOTFS_SIZE: '1024' # 定時執行時的預設值
+          ROOTFS_SIZE: '1024'
           MANAGEMENT_IP: '192.168.100.1'
         run: |
+          # 🌟 核心防護：抹除 Windows 換行符
+          sed -i 's/\r$//' build.sh
+          
           chmod +x build.sh
           cp build.sh imagebuilder/
           cd imagebuilder
+          
+          # 雙重防護
+          sed -i 's/\r$//' build.sh
+          
           ./build.sh
 
       - name: 生成發布標籤
@@ -80,9 +100,11 @@ jobs:
           name: OpenWrt ${{ env.OWRT_VERSION }} 自動更新版
           files: imagebuilder/output-firmware/*
           body: |
-            **🤖 偵測到官方版本更新，已自動完成構建**
-            - **OpenWrt 版本**: `${{ env.OWRT_VERSION }}`
+            **🤖 OpenWrt 終極客製化韌體**
+            - **版本**: `${{ env.OWRT_VERSION }}`
             - **構建時間**: `${{ env.release_tag }}`
-            - **預設 IP**: `192.168.100.1`
+            - **管理 IP**: `192.168.100.1`
+            - **硬碟掛載**: 已綁定 `sda3` (為 Docker 預留)
+            - **核心**: 已內建 OpenClash Meta 核心與 Argon 主題
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
