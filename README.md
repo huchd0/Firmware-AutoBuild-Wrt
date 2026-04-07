@@ -8,7 +8,7 @@
 
    1、fork本项目
 
-   2、在fork后的项目中 点击【action】 ，左边找到需要的工作流后在右边 【run-workflow】
+   2、在fork后的项目中 点击操作【action】 ，左边找到需要的工作流后在右边 运行工作流程【run-workflow】
 
 网络配置：
 
