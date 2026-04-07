@@ -3,14 +3,14 @@ name: OpenWrt x86_64 智慧自動編譯發布
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-on:
+于:
   workflow_dispatch: # 保留手動觸發
     inputs:
       openwrt_version:
         description: '選擇版本 (或輸入 latest)'
         required: true
-        default: 'latest'
-        type: string
+        默认: 'latest'
+        输入: string
   schedule:
     - cron: '0 0 * * *' # 💡 每天午夜 00:00 自動執行檢查
 
@@ -60,7 +60,7 @@ jobs:
       - name: 運行編譯腳本
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         env:
-          ROOTFS_SIZE: '1024' # 定時執行時的預設值
+          ROOTFS_SIZE: '10240' # 定時執行時的預設值
           MANAGEMENT_IP: '192.168.100.1'
         run: |
           chmod +x build.sh
@@ -78,7 +78,7 @@ jobs:
         with:
           tag_name: ${{ env.release_tag }}
           name: OpenWrt ${{ env.OWRT_VERSION }} 自動更新版
-          files: imagebuilder/output-firmware/*
+          文件: imagebuilder/output-firmware/*
           body: |
             **🤖 偵測到官方版本更新，已自動完成構建**
             - **OpenWrt 版本**: `${{ env.OWRT_VERSION }}`
