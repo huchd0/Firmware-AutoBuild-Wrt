@@ -14,7 +14,13 @@ mkdir -p /mnt/sda3/docker
 uci set dockerman.docker.data_root='/mnt/sda3/docker'
 uci commit dockerman
 
-# 6. 重新启动 Docker，认领旧数据！
+# 6. 如果已经存在旧的 Docker 数据（需要迁移过去）
+# cp -a /mnt/sdb1/old_docker/* /mnt/sda3/docker/
+
+# 7. 重新启动 Docker，认领旧数据（如果有需要迁移旧数据，迁移完之前千万别启动 Docker）
 /etc/init.d/dockerd start
+
+# *如果迁移数据前已经运行了Docker，需要停止Docker后把自动生成的那些没用的基础骨架全部删除，再执行上面第六步迁移
+# rm -rf /mnt/sda3/docker/*
 
 echo "🎉 Docker 安装并重定向完毕！请使用 docker info 检查数据路径。"
