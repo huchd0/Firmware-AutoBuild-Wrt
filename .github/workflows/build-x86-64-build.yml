@@ -1,4 +1,4 @@
-name: OpenWrt x86_64 动态定制构建
+name: OpenWrt x86_64 手动定制构建
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
