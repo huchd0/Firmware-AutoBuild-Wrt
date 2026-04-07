@@ -1,4 +1,4 @@
-name: OpenWrt x86_64 智慧自動編譯發布
+name: OpenWrt x86_64 智能自动编译发布
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       openwrt_version:
-        description: '選擇版本 (或輸入 latest)'
+        description: '选择版本 (或输入 latest)'
         required: true
         default: 'latest'
         type: string
@@ -18,27 +18,27 @@ jobs:
   check_and_build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout 代碼
+      - name: Checkout 代码
         uses: actions/checkout@v4
 
-      - name: 🔍 檢測官方與本地版本是否一致
+      - name: 🔍 检测官方与本地版本是否一致
         id: check_version
         run: |
           INPUT_VER="${{ inputs.openwrt_version }}"
           EVENT_NAME="${{ github.event_name }}"
           
-          # 1. 獲取官方最新穩定版號
+          # 1. 获取官方最新稳定版号
           OFFICIAL_LATEST=$(curl -s "https://api.github.com/repos/openwrt/openwrt/releases" | grep '"tag_name":' | grep -v 'rc' | head -n 1 | cut -d '"' -f 4 | sed 's/v//')
           
-          # 2. 獲取本地最後發布
+          # 2. 获取本地最后发布
           MY_LATEST=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | grep '"name":' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || echo "0.0.0")
 
           echo "官方最新版本: $OFFICIAL_LATEST"
-          echo "本地最後發布: $MY_LATEST"
+          echo "本地最后发布: $MY_LATEST"
 
-          # 3. 智慧判斷邏輯
+          # 3. 智能判断逻辑
           if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
-            echo "手動觸發模式！強制執行編譯。"
+            echo "手动触发模式！强制执行编译。"
             echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
             if [ -z "$INPUT_VER" ] || [ "$INPUT_VER" == "latest" ]; then
               echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
@@ -46,65 +46,65 @@ jobs:
               echo "OWRT_VERSION=$INPUT_VER" >> $GITHUB_ENV
             fi
           else
-            echo "定時檢查模式！"
+            echo "定时检查模式！"
             if [ "$OFFICIAL_LATEST" != "$MY_LATEST" ]; then
-              echo "發現新版本！準備更新..."
+              echo "发现新版本！准备更新..."
               echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
               echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
             else
-              echo "版本一致，無需更新。任務終止。"
+              echo "版本一致，无需更新。任务终止。"
               echo "SHOULD_BUILD=false" >> $GITHUB_OUTPUT
             fi
           fi
 
-      - name: 安裝編譯依賴
+      - name: 安装编译依赖
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip bzip2 patch python3 findutils zstd
 
-      - name: 下載並解壓 ImageBuilder
+      - name: 下载并解压 ImageBuilder
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: |
           wget -q https://downloads.openwrt.org/releases/${{ env.OWRT_VERSION }}/targets/x86/64/openwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64.tar.zst
           tar -I zstd -xf openwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64.tar.zst
           mv openwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64 imagebuilder
 
-      - name: 運行編譯腳本
+      - name: 运行编译脚本
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         env:
           ROOTFS_SIZE: '1024'
           MANAGEMENT_IP: '192.168.100.1'
         run: |
-          # 🌟 核心防護：抹除 Windows 換行符
+          # 🌟 核心防护：抹除 Windows 换行符
           sed -i 's/\r$//' build.sh
           
           chmod +x build.sh
           cp build.sh imagebuilder/
           cd imagebuilder
           
-          # 雙重防護
+          # 双重防护
           sed -i 's/\r$//' build.sh
           
           ./build.sh
 
-      - name: 生成發布標籤
+      - name: 生成发布标签
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
 
-      - name: 自動發布到 Releases
+      - name: 自动发布到 Releases
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.release_tag }}
-          name: OpenWrt ${{ env.OWRT_VERSION }} 自動更新版
+          name: OpenWrt ${{ env.OWRT_VERSION }} 自动更新版
           files: imagebuilder/output-firmware/*
           body: |
-            **🤖 OpenWrt 終極客製化韌體**
+            **🤖 OpenWrt 终极定制化固件**
             - **版本**: `${{ env.OWRT_VERSION }}`
-            - **構建時間**: `${{ env.release_tag }}`
+            - **构建时间**: `${{ env.release_tag }}`
             - **管理 IP**: `192.168.100.1`
-            - **硬碟掛載**: 已綁定 `sda3` (為 Docker 預留)
-            - **核心**: 已內建 OpenClash Meta 核心與 Argon 主題
+            - **硬盘挂载**: 已绑定 `sda3` (为 Docker 预留)
+            - **核心**: 已内置 OpenClash Meta 核心与 Argon 主题
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
