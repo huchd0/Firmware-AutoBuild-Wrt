@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       luci_version:
-        description: "选择版本 (auto 仅拉取最新稳定版)"
+        description: "选择版本 (auto 自动构建最新稳定版)"
         required: true
         default: "auto"
         type: choice
@@ -37,15 +37,20 @@ jobs:
         run: |
           if [ "${{ github.event.inputs.luci_version }}" = "auto" ]; then
             echo "正在检索 Docker Hub 以查找最新稳定版本..."
-            # 删除了错误的 grep -v '-'
-            # 正则表达式已经确保只会匹配 x86-64-openwrt-数字.数字.数字 的纯稳定版
-            LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags/?page_size=100" | \
+            
+            # 优化点 1：通过 name 过滤，只向 Docker Hub 索要 x86-64 相关的镜像，防止被其他架构刷屏
+            API_URL="https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags/?page_size=100&name=x86-64-openwrt-"
+            
+            # 获取数据并过滤出纯数字结尾的稳定版 (例如 23.05.4, 24.10.5)
+            LATEST_TAG=$(curl -s "$API_URL" | \
               jq -r '.results[].name' | \
               grep -E '^x86-64-openwrt-[0-9]+\.[0-9]+(\.[0-9]+)?$' | \
               sort -V | tail -n 1)
             
+            # 优化点 2：如果还是没找到，打印出找到的所有 x86 标签供排查，不再“死得不明不白”
             if [ -z "$LATEST_TAG" ]; then
-              echo "❌ 未找到符合条件的稳定版标签，请检查网络或手动指定版本。"
+              echo "❌ 未找到符合正则条件的稳定版标签！下面输出拉取到的原始标签列表供排查："
+              curl -s "$API_URL" | jq -r '.results[].name' | grep 'x86-64'
               exit 1
             fi
             
