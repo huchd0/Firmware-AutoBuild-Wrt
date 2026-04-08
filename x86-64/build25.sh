@@ -26,14 +26,14 @@ EOF
 chmod +x /home/build/immortalwrt/files/etc/uci-defaults/99-init-settings
 
 # ================= 软连接与包组合 =================
-# 基础常用工具
-PACKAGES="curl wget luci-i18n-diskman-zh-cn luci-i18n-filemanager-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-ttyd-zh-cn openssh-sftp-server"
+# 基础常用工具与测速
+PACKAGES="curl wget iperf3 luci-i18n-diskman-zh-cn luci-i18n-filemanager-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-ttyd-zh-cn openssh-sftp-server"
 # 主题外观
 PACKAGES="$PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
-# 网络防火墙
-PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn"
-# 科学上网 (按需保留)
-PACKAGES="$PACKAGES xray-core hysteria luci-i18n-passwall-zh-cn luci-app-openclash luci-i18n-homeproxy-zh-cn"
+# 网络防火墙与辅助 (新增 UPnP 和 定时重启)
+PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn luci-i18n-upnp-zh-cn luci-i18n-autoreboot-zh-cn"
+# 科学上网
+PACKAGES="$PACKAGES luci-app-openclash"
 # 合并自定义包
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
@@ -49,9 +49,6 @@ if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
     else
         echo "⚠️ 核心下载失败，编译将继续，但固件内需手动更新。"
     fi
-
-    wget -q --show-progress https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat || true
-    wget -q --show-progress https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat || true
 fi
 
 # ================= 执行镜像打包 =================
