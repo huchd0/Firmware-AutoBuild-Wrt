@@ -38,7 +38,8 @@
   
   ## https://downloads.openwrt.org/releases/packages-25.12/x86_64/packages/
   
-   通常在一个版本的完整源路径下（比如 .../x86_64/ 后面），会有以下几个核心文件夹：
+  
+   ## 通常在一个版本的完整源路径下（比如 .../x86_64/ 后面），会有以下几个核心文件夹：
 
    packages/：存放绝大多数第三方命令行工具和核心服务（比如 curl, bash, jq, iperf3, ruby 等）。
 
