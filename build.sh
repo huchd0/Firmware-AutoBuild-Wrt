@@ -138,13 +138,15 @@ luci luci-base luci-compat luci-i18n-base-zh-cn \
 luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn \
 luci-app-ttyd luci-i18n-ttyd-zh-cn \
 luci-app-ksmbd luci-i18n-ksmbd-zh-cn \
+luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn \
 block-mount blkid lsblk parted fdisk \
 e2fsprogs \
-kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat \
+kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat kmod-fs-exfat \
 coreutils-nohup coreutils-base64 coreutils-sort bash jq curl ca-bundle \
 ip-full iptables-mod-tproxy iptables-mod-extra kmod-tun kmod-inet-diag \
 kmod-nft-tproxy kmod-igc iwinfo \
-libcap libcap-bin ruby ruby-yaml unzip"
+libcap libcap-bin ruby ruby-yaml unzip \
+nano htop ethtool tcpdump mtr traceroute conntrack iftop screen"
 
 echo ">>> 6. 开始 Make Image 打包 <<<"
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files"
