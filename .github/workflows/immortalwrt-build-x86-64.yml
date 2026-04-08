@@ -66,8 +66,10 @@ jobs:
           
           mkdir -p ${{ github.workspace }}/output
           
-          # 注意看这里：我已经删除了那个危险的 imm25.config 映射行
+          # 注意看下面新增的 --privileged 和 --network host
           docker run --rm -i \
+            --privileged \
+            --network host \
             --user root \
             -v "${{ github.workspace }}/output:/output" \
             -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
