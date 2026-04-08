@@ -76,15 +76,16 @@ else
             uci set network.wan6.proto='dhcpv6'
             uci set network.wan6.device='eth0'
         else
-            uci add_list network.@device[0].ports="\$iface"
+            uci add_list network.br_lan.ports="$iface" 
         fi
     done
 fi
 uci commit network
 
 # --- C. 智能大分区挂载保护 (为后续手动装 Docker 铺路) ---
-TARGET_UUID="e621dbaa-2a9b-4319-9ebd-4f4f6e47ce50"
-if blkid | grep -q "\$TARGET_UUID"; then
+# 动态获取 sda3 的 UUID
+TARGET_UUID=$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
+if [ -n "$TARGET_UUID" ]; then
     echo "config 'global'" > /etc/config/fstab
     echo "  option  anon_swap   '0'" >> /etc/config/fstab
     echo "  option  anon_mount  '0'" >> /etc/config/fstab
@@ -113,7 +114,7 @@ exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-custom-setup
 
-echo ">>> 5. 配置官方软件列表 (纯净极简版，无 Docker) <<<"
+echo ">>> 5. 配置官方软件列表 <<<"
 PACKAGES="-dnsmasq dnsmasq-full \
 luci luci-base luci-compat luci-i18n-base-zh-cn \
 luci-i18n-firewall-zh-cn \
@@ -123,7 +124,7 @@ luci-app-ksmbd luci-i18n-ksmbd-zh-cn \
 block-mount blkid lsblk parted fdisk \
 kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat \
 coreutils-nohup bash curl ca-bundle ip-full iptables-mod-tproxy iptables-mod-extra \
-libcap libcap-bin ruby ruby-yaml kmod-tun kmod-inet-diag unzip kmod-nft-tproxy kmod-igc iwinfo"
+libcap libcap-bin kmod-tun kmod-inet-diag unzip kmod-nft-tproxy kmod-igc iwinfo"
 
 echo ">>> 6. 开始 Make Image 打包 <<<"
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files"
