@@ -49,6 +49,23 @@ mv files/etc/openclash/core/clash files/etc/openclash/core/clash_meta
 chmod +x files/etc/openclash/core/clash_meta
 rm -f files/etc/openclash/core/meta.tar.gz
 
+# --- 注入 MT7925 官方蓝牙与无线固件 (GitLab 锁定版本) ---
+echo "正在注入 MT7925 官方底层固件..."
+
+# 1. 创建精确的层级目录
+mkdir -p files/lib/firmware/mediatek/mt7925
+
+# 2. 下载蓝牙固件 (通常位于 mediatek/ 根目录)
+wget -qO files/lib/firmware/mediatek/BT_RAM_CODE_MT7925_1_1_hdr.bin \
+"https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/BT_RAM_CODE_MT7925_1_1_hdr.bin"
+
+# 3. 下载 Wi-Fi 固件 (根据你提供的准确路径，放入 mt7925/ 子目录)
+wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin \
+"https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin"
+
+wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin \
+"https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
+
 echo ">>> 4. 编写全自动开机初始化脚本 <<<"
 cat << EOF > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
