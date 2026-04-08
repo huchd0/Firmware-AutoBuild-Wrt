@@ -1,4 +1,4 @@
-name: build-x86-64-immortalwrt-auto
+name: immortalwrt-build-x86-64
 
 on:
   workflow_dispatch:
