@@ -82,7 +82,26 @@ else
 fi
 uci commit network
 
-# --- C. 智能大分区挂载保护 ---
+# --- C. 智能大分区 (sda3) 自动创建与挂载保护 ---
+# 1. 检查 sda3 是否存在，不存在则说明是全新刷机，自动创建并格式化
+if ! lsblk | grep -q sda3; then
+    echo "Detecting unallocated space, creating /dev/sda3..."
+    # 修复可能存在的 GPT 表尾部错误，并保存
+    echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
+    # 自动输入命令给 fdisk: n(新建) -> 3(分区号) -> 回车(默认起始) -> 回车(默认结束，用尽空间) -> w(保存)
+    echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
+    
+    # 刷新内核分区表缓存
+    partx -a /dev/sda >/dev/null 2>&1 || true
+    sleep 2
+    
+    # 将新创建的 sda3 格式化为 ext4
+    if lsblk | grep -q sda3; then
+        mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
+    fi
+fi
+
+# 2. 动态获取 sda3 的 UUID 并配置挂载
 TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
 if [ -n "\$TARGET_UUID" ]; then
     echo "config 'global'" > /etc/config/fstab
@@ -121,6 +140,7 @@ luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn \
 luci-app-ttyd luci-i18n-ttyd-zh-cn \
 luci-app-ksmbd luci-i18n-ksmbd-zh-cn \
 block-mount blkid lsblk parted fdisk \
+e2fsprogs util-linux-partx \
 kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat \
 coreutils-nohup coreutils-base64 coreutils-sort bash jq curl ca-bundle \
 ip-full iptables-mod-tproxy iptables-mod-extra kmod-tun kmod-inet-diag \
