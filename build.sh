@@ -58,56 +58,65 @@ wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin \
 wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin \
 "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
 
-# ===================================================================
-# --- E. 极速模式：注入固定 WiFi 配置并延迟启动 ---
-# ===================================================================
-
-# 1. 直接生成你提供的固定无线配置文件 (强力纠错：ieee80211w 已改为 1)
-mkdir -p files/etc/config
-cat << EOF > files/etc/config/wireless
-config wifi-device 'radio0'
-	option type 'mac80211'
-	option path 'pci0000:00/0000:00:14.1/0000:06:00.0'
-	option band '5g'
-	option channel '149'
-	option htmode 'EHT80'
-	option country 'AU'
-	option cell_density '0'
-	option txpower '23'
-
-config wifi-iface 'default_radio0'
-	option device 'radio0'
-	option network 'lan'
-	option mode 'ap'
-	option ssid 'mywifi7'
-	option encryption 'sae-mixed'
-	option key 'Aa666666'
-	option ieee80211w '1'
-	option disabled '1'
-EOF
-
-# 2. 写入开机自启脚本：等待硬件通电后，执行你的启动命令
-cat << 'STARTWIFI' > files/etc/uci-defaults/99-start-wifi
-#!/bin/sh
-(
-    # 给 MT7925 网卡 10 秒钟时间加载底层固件
-    sleep 10
-    
-    # 执行你指定的开启命令
-    uci set wireless.default_radio0.disabled='0'
-    uci commit wireless
-    wifi reload
-    
-    # 顺手重启统计服务，激活 Network 图表
-    sleep 3
-    /etc/init.d/luci_statistics restart
-    /etc/init.d/collectd restart
-) &
-exit 0
-STARTWIFI
-chmod +x files/etc/uci-defaults/99-start-wifi
-
 echo ">>> 4. 编写全自动开机初始化脚本 <<<"
+# ===================================================================
+# --- E. 极速潜伏模式：自动获取物理路径，并覆盖你的专属 WiFi 设置 ---
+# ===================================================================
+cat << 'EOF_WATCHER' > files/etc/init.d/wifi-watcher
+#!/bin/sh /etc/rc.common
+START=99
+
+start() {
+    (
+        # 循环探测无线网卡，最多等待 60 秒
+        for i in $(seq 1 30); do
+            # 【核心修复】：强制系统自动识别硬件，生成带有正确 option path 的配置文件
+            wifi config
+            
+            # 如果系统成功识别并生成了 radio0，就开始修改参数
+            if uci get wireless.radio0 >/dev/null 2>&1; then
+                
+                # 保留系统自动生成的 option type 和 option path，只覆盖你的参数
+                uci set wireless.radio0.disabled='0'
+                uci set wireless.radio0.band='5g'
+                uci set wireless.radio0.channel='149'
+                uci set wireless.radio0.htmode='EHT80'
+                uci set wireless.radio0.country='AU'
+                uci set wireless.radio0.cell_density='0'
+                uci set wireless.radio0.txpower='23'
+
+                if uci get wireless.default_radio0 >/dev/null 2>&1; then
+                    uci set wireless.default_radio0.device='radio0'
+                    uci set wireless.default_radio0.network='lan'
+                    uci set wireless.default_radio0.mode='ap'
+                    uci set wireless.default_radio0.ssid='mywifi7'
+                    uci set wireless.default_radio0.encryption='sae-mixed'
+                    uci set wireless.default_radio0.key='Aa666666'
+                    
+                    # ⚠️ WPA3 (sae-mixed) 必须开启管理帧保护，否则直接罢工
+                    uci set wireless.default_radio0.ieee80211w='1'
+                fi
+
+                uci commit wireless
+                wifi reload
+                
+                # 顺手重启统计服务，激活 Network 图表
+                sleep 3
+                /etc/init.d/luci_statistics restart
+                /etc/init.d/collectd restart
+                
+                # 任务完成，自我销毁
+                /etc/init.d/wifi-watcher disable
+                rm -f /etc/init.d/wifi-watcher
+                break
+            fi
+            sleep 2
+        done
+    ) &
+}
+EOF_WATCHER
+chmod +x files/etc/init.d/wifi-watcher
+
 cat << EOF > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
 
@@ -210,7 +219,7 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     touch /etc/collectd_inited
 fi
 
-# --- E. 软件源与插件安装 ---
+# --- F. 软件源与插件安装 ---
 if [ -d "/etc/apk/repositories.d" ]; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
 fi
