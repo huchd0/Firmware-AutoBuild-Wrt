@@ -27,6 +27,7 @@ echo ">>> 2. 准备初始化文件夹 <<<"
 mkdir -p files/root
 mkdir -p files/etc/uci-defaults
 mkdir -p files/etc/init.d
+mkdir -p files/etc/config
 
 echo ">>> 3. 下载第三方 APK 插件与 OpenClash 核心 <<<"
 OPENCLASH_URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
@@ -46,78 +47,39 @@ mv files/etc/openclash/core/clash files/etc/openclash/core/clash_meta
 chmod +x files/etc/openclash/core/clash_meta
 rm -f files/etc/openclash/core/meta.tar.gz
 
-# 【已恢复】你的原版 MT7925 固件注入（这是 Wi-Fi 能启动的命根子）
-echo "正在注入 MT7925 官方底层固件..."
-mkdir -p files/lib/firmware/mediatek/mt7925
-wget -qO files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin"
-wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin"
-wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
-
 
 # ===================================================================
-# --- E. 绝对可靠：独立的 Wi-Fi 延时开启脚本 ---
+# --- 核心：直接把配置写死，变成路由器的“出厂设置” ---
 # ===================================================================
-cat << 'EOF_WIFI' > files/etc/init.d/wifi-enabler
-#!/bin/sh /etc/rc.common
-START=99
+# 这段配置会在编译时直接塞进固件，开机即是这个状态
+cat << EOF > files/etc/config/wireless
+config wifi-device 'radio0'
+	option type 'mac80211'
+	option path 'pci0000:00/0000:00:14.1/0000:06:00.0'
+	option band '5g'
+	option channel '149'
+	option htmode 'EHT80'
+	option country 'AU'
+	option cell_density '0'
+	option txpower '23'
+	# 最关键的一步：出厂默认就是开启状态
+	option disabled '0'
 
-start() {
-    (
-        # 1. 监测硬件：等待最多 60 秒，直到系统彻底认出无线网卡
-        WAIT_TIME=0
-        while [ $WAIT_TIME -lt 60 ]; do
-            if iwinfo | grep -q "ESSID"; then
-                break
-            fi
-            sleep 2
-            WAIT_TIME=$((WAIT_TIME + 2))
-        done
-        
-        # 2. 硬件就绪后，强制重新生成配置，防止出现幽灵网卡
-        rm -f /etc/config/wireless
-        wifi config
-        sleep 2
-        
-        # 3. 强力写入：统一开启，统一名称 mywifi7
-        if uci show wireless | grep -q 'wifi-device'; then
-            for radio in $(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
-                uci set wireless.${radio}.disabled='0'
-                uci set wireless.${radio}.country='AU'
-            done
-            
-            for iface in $(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
-                uci set wireless.${iface}.ssid='mywifi7'
-                uci set wireless.${iface}.encryption='sae-mixed'
-                uci set wireless.${iface}.key='Aa666666'
-                # ⚠️ WPA3必须开启PMF
-                uci set wireless.${iface}.ieee80211w='1'
-                uci set wireless.${iface}.network='lan'
-                uci set wireless.${iface}.mode='ap'
-            done
-            
-            uci commit wireless
-            wifi reload
-            
-            # Wi-Fi开启后重启收集器，把无线流量纳入图表
-            sleep 3
-            /etc/init.d/collectd restart
-        fi
-        
-        # 任务完成，自我销毁，以后开机不再执行
-        /etc/init.d/wifi-enabler disable
-        rm -f /etc/init.d/wifi-enabler
-    ) &
-}
-EOF_WIFI
-chmod +x files/etc/init.d/wifi-enabler
+config wifi-iface 'default_radio0'
+	option device 'radio0'
+	option network 'lan'
+	option mode 'ap'
+	option ssid 'mywifi7'
+	option encryption 'sae-mixed'
+	option key 'Aa666666'
+	# 强力纠错：WPA3必须开启PMF
+	option ieee80211w '1'
+EOF
 
 
 echo ">>> 4. 编写全自动开机初始化脚本 <<<"
 cat << EOF > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
-
-# 激活 Wi-Fi 唤醒脚本
-/etc/init.d/wifi-enabler enable
 
 # --- A. 核心网络设置 ---
 uci set network.lan.ipaddr='$MANAGEMENT_IP'
@@ -176,13 +138,11 @@ if [ -n "\$TARGET_UUID" ]; then
     uci set fstab.@mount[-1].enabled='1'
     uci commit fstab
     
-    # 【已恢复】强制挂载大硬盘，防止后续统计配置找不到目录
     mkdir -p /mnt/sda3
     mount /dev/sda3 /mnt/sda3 2>/dev/null || block mount
 fi
 
 # --- D. 基础性能监控配置 ---
-# 【已恢复】原版的 touch 逻辑，确保存储图表绝对生效
 if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     
     [ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
@@ -212,11 +172,24 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     uci add_list luci_statistics.collectd_ping.Hosts='8.8.8.8'
 
     uci commit luci_statistics
+    
+    # 彻底激活收集器
+    /etc/init.d/luci_statistics enable
+    /etc/init.d/luci_statistics restart
     /etc/init.d/collectd enable
     /etc/init.d/collectd restart
     
     touch /etc/collectd_inited
 fi
+
+# --- E. 极速开机重启无线服务 ---
+# 开机时稍微等一下，等网卡通电后，强制重启无线服务，让系统读取我们预埋的配置
+(
+    sleep 15
+    wifi reload
+    sleep 3
+    /etc/init.d/collectd restart
+) &
 
 # --- F. 软件源与插件安装 ---
 if [ -d "/etc/apk/repositories.d" ]; then
