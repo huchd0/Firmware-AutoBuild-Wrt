@@ -91,11 +91,16 @@ echo ">>> 4. 编写全自动开机初始化脚本 <<<"
 cat << EOF > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
 
-# --- A. 核心网络设置 ---
+# --- A1. 核心网络设置 ---
 uci set network.lan.ipaddr='$MANAGEMENT_IP'
 uci delete network.@device[0].ports 2>/dev/null
 uci set network.lan.device='br-lan'
 uci delete network.lan.type 2>/dev/null
+
+# --- A2. 强行设置时区为中国 (Asia/Shanghai) ---
+uci set system.@system[0].timezone='CST-8'
+uci set system.@system[0].zonename='Asia/Shanghai'
+uci commit system
 
 # --- B. 智能网口分配逻辑 ---
 INTERFACES=\$(ls /sys/class/net | grep -E '^eth[0-9]+' | sort)
@@ -165,7 +170,7 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     uci set luci_statistics.collectd.PIDFile='/var/run/collectd.pid'
     uci set luci_statistics.collectd.PluginDir='/usr/lib/collectd'
     uci set luci_statistics.collectd.TypesDB='/usr/share/collectd/types.db'
-    uci set luci_statistics.collectd.Interval='30'     # 这就是关键的刷新频率参数！
+    uci set luci_statistics.collectd.Interval='30'
     uci set luci_statistics.collectd.ReadThreads='2'
     uci set luci_statistics.collectd.enable='1'
     
@@ -242,7 +247,6 @@ PKG_WIFI_BT="-wpad-basic-mbedtls -wpad-basic-wolfssl wpad-openssl \
 kmod-mt7925e kmod-mt7925-firmware \
 kmod-btusb bluez-daemon kmod-input-uinput"
 
-# 包含了你成功画图所需的所有依赖
 PKG_MONITOR="nano htop ethtool tcpdump mtr conntrack iftop screen \
 collectd-mod-thermal collectd-mod-sensors collectd-mod-cpu collectd-mod-ping collectd-mod-interface collectd-mod-rrdtool collectd-mod-iwinfo"
 
