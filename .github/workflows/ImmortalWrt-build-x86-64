@@ -1,0 +1,93 @@
+name: ImmortalWrt-build-x86-64
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt_version:
+        description: 'ImmortalWrt 版本(latest智能选择最新稳定版)'
+        required: true
+        default: 'latest'
+        type: choice
+        options:
+          - 'latest'
+      profile:
+        description: 'RootFS 分区大小 (单位: MB)'
+        required: true
+        default: '1024'
+        type: string
+      custom_ip:
+        description: '路由器管理地址'
+        required: true
+        default: '192.168.100.1'
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+      
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 🌟 智能获取 ImmortalWrt 版本号
+        id: get_version
+        run: |
+          INPUT_VER="${{ inputs.openwrt_version }}"
+          if [ -z "$INPUT_VER" ] || [ "$INPUT_VER" == "latest" ]; then
+            echo "正在查询 ImmortalWrt 官方最新稳定版..."
+            LATEST_VER=$(curl -s "https://api.github.com/repos/immortalwrt/immortalwrt/releases" | grep '"tag_name":' | grep -v 'rc' | head -n 1 | cut -d '"' -f 4 | sed 's/v//')
+            echo "🎉 成功获取到版本: $LATEST_VER"
+            echo "OWRT_VERSION=$LATEST_VER" >> $GITHUB_ENV
+          else
+            echo "OWRT_VERSION=$INPUT_VER" >> $GITHUB_ENV
+          fi
+
+      - name: 安装 Ubuntu 原生编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip bzip2 patch python3 findutils zstd
+
+      - name: 下载并解压 ImageBuilder
+        run: |
+          echo ">>> 正在下载 ImmortalWrt ${{ env.OWRT_VERSION }} <<<"
+          wget -q https://downloads.immortalwrt.org/releases/${{ env.OWRT_VERSION }}/targets/x86/64/immortalwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64.tar.xz
+          tar -xf immortalwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64.tar.xz
+          mv immortalwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64 imagebuilder
+
+      - name: 运行定制脚本
+        env:
+          ROOTFS_SIZE: ${{ inputs.profile }}
+          MANAGEMENT_IP: ${{ inputs.custom_ip }}
+        run: |
+          # 【核心修改点】：指向你最新的路径和文件名
+          sed -i 's/\r$//' x86-64/build251.sh
+          chmod +x x86-64/build251.sh
+          cp x86-64/build251.sh imagebuilder/
+          cd imagebuilder
+          
+          # 运行复制过来的新脚本
+          ./build251.sh
+
+      - name: 生成版本标签
+        id: tag
+        run: echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
+
+      - name: 发布到 Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.release_tag }}
+          name: ImmortalWrt ${{ env.OWRT_VERSION }} 定制版 [IP ${{ inputs.custom_ip }}]
+          files: imagebuilder/output-firmware/*
+          body: |
+            **🎉 ImmortalWrt ${{ env.OWRT_VERSION }} x86_64 终极定制版**
+            
+            **核心特性：**
+            - 🌐 **后台地址**: `http://${{ inputs.custom_ip }}`
+            - 📶 **无线网络**: 开机自动散发 `mywifi7` 信号 (已修复硬件时差)
+            - 🛡️ **核心插件**: 自带 OpenClash (预置 Meta 内核) 与 Argon 主题
+            - 📊 **性能监控**: CPU、温度、传感器、大盘挂载及图表全自动配置
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
