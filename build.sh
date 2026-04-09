@@ -200,6 +200,9 @@ uci set luci_statistics.collectd.TypesDB='/usr/share/collectd/types.db'
 uci set luci_statistics.collectd.Interval='30'
 uci set luci_statistics.collectd.ReadThreads='2'
 uci set luci_statistics.collectd.enable='1'
+uci del luci_statistics.collectd_network.enable
+uci set luci_statistics.collectd_mqtt=statistics
+
 
 if [ -d "/mnt/sda3/" ]; then
     uci set luci_statistics.collectd_rrdtool=statistics
