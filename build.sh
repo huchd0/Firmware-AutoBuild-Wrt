@@ -154,6 +154,13 @@ if uci get wireless.radio0 >/dev/null 2>&1; then
     uci commit wireless
 fi
 
+# --- F. 自动唤醒系统性能监控 (Statistics/collectd) ---
+# 开启服务并设置开机自启
+if [ -x "/etc/init.d/collectd" ]; then
+    /etc/init.d/collectd enable
+    /etc/init.d/collectd start
+fi
+
 # --- E. 软件源与插件安装 (纯离线秒装模式) ---
 if [ -d "/etc/apk/repositories.d" ]; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
