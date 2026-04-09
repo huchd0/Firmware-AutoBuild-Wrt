@@ -26,20 +26,9 @@ echo "CONFIG_GRUB_IMAGES=n" >> .config
 echo ">>> 2. 准备初始化文件夹 <<<"
 mkdir -p files/root
 mkdir -p files/etc/uci-defaults
-mkdir -p files/etc/init.d
 
-echo ">>> 3. 下载第三方 APK 插件与 OpenClash 核心 <<<"
-OPENCLASH_URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
-if [ -n "$OPENCLASH_URL" ]; then
-    wget -qO files/root/luci-app-openclash.apk "$OPENCLASH_URL"
-fi
-
-ARGON_URL=$(curl -s https://api.github.com/repos/jerrykuku/luci-theme-argon/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
-if [ -n "$ARGON_URL" ]; then
-    wget -qO files/root/luci-theme-argon.apk "$ARGON_URL"
-fi
-
-echo "正在下载 OpenClash Meta 兼容版内核..."
+echo ">>> 3. 下载 OpenClash Meta 核心 <<<"
+# OpenClash 的 Meta 核心依然需要，保留下载
 mkdir -p files/etc/openclash/core
 wget -qO files/etc/openclash/core/meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-compatible.tar.gz"
 tar -zxf files/etc/openclash/core/meta.tar.gz -C files/etc/openclash/core/
@@ -47,79 +36,13 @@ mv files/etc/openclash/core/clash files/etc/openclash/core/clash_meta
 chmod +x files/etc/openclash/core/clash_meta
 rm -f files/etc/openclash/core/meta.tar.gz
 
-echo "正在注入 MT7925 官方底层固件..."
-mkdir -p files/lib/firmware/mediatek/mt7925
-wget -qO files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin \
-"https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin"
-wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin \
-"https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin"
-wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin \
-"https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
+# 🚨【核心排雷】：已彻底删除 wget 下载 MT7925 .bin 的代码！
+# 必须让系统使用官方纯净驱动，否则网卡在开机时会假死！
 
 echo ">>> 4. 编写全自动开机初始化脚本 <<<"
 
-# ===================================================================
-# --- 这是唯一的新增代码：解决动态提取 PCI 路径并自动开启 Wi-Fi ---
-# ===================================================================
-cat << 'EOF_WIFI' > files/etc/init.d/wifi-auto-enable
-#!/bin/sh /etc/rc.common
-START=99
-
-start() {
-    # 把它扔到后台执行，绝对不干扰你的正常开机流程
-    (
-        # 1. 默默等待物理网卡初始化完成
-        WAIT_TIME=0
-        while [ $WAIT_TIME -lt 60 ]; do
-            if iwinfo | grep -q "ESSID"; then
-                break
-            fi
-            sleep 2
-            WAIT_TIME=$((WAIT_TIME+2))
-        done
-
-        # 2. 网卡就绪后，让系统自动抓取最新的 pci 路径
-        rm -f /etc/config/wireless
-        wifi config
-        sleep 2
-
-        # 3. 强力覆盖配置：统一名字、启用信号
-        if uci show wireless | grep -q 'wifi-device'; then
-            for radio in $(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
-                uci set wireless.${radio}.disabled='0'
-            done
-
-            for iface in $(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
-                uci set wireless.${iface}.ssid='mywifi7'
-                uci set wireless.${iface}.encryption='sae-mixed'
-                uci set wireless.${iface}.key='Aa666666'
-                uci set wireless.${iface}.ieee80211w='1'
-            done
-
-            uci commit wireless
-            wifi reload
-            
-            # Wi-Fi 开启后踢一脚图表服务，让它把 Wi-Fi 的流量也画出来
-            sleep 3
-            /etc/init.d/collectd restart
-        fi
-
-        # 自我销毁，下次开机不再执行
-        /etc/init.d/wifi-auto-enable disable
-        rm -f /etc/init.d/wifi-auto-enable
-    ) &
-}
-EOF_WIFI
-chmod +x files/etc/init.d/wifi-auto-enable
-
-# ===================================================================
-# --- 以下完全恢复你之前验证过可用的原始代码 ---
-# ===================================================================
-cat << EOF > files/etc/uci-defaults/99-custom-setup
+cat << 'EOF' > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
-
-# 注册我们的 Wi-Fi 自动开启服务
-/etc/init.d/wifi-auto-enable enable
 
 # --- A. 核心网络设置 ---
 uci set network.lan.ipaddr='$MANAGEMENT_IP'
@@ -128,16 +51,16 @@ uci set network.lan.device='br-lan'
 uci delete network.lan.type 2>/dev/null
 
 # --- B. 智能网口分配逻辑 ---
-INTERFACES=\$(ls /sys/class/net | grep -E '^eth[0-9]+' | sort)
-PORT_COUNT=\$(echo "\$INTERFACES" | wc -w)
+INTERFACES=$(ls /sys/class/net | grep -E '^eth[0-9]+' | sort)
+PORT_COUNT=$(echo "$INTERFACES" | wc -w)
 
-if [ "\$PORT_COUNT" -eq 1 ]; then
+if [ "$PORT_COUNT" -eq 1 ]; then
     uci add_list network.@device[0].ports='eth0'
     uci delete network.wan 2>/dev/null
     uci delete network.wan6 2>/dev/null
 else
-    for iface in \$INTERFACES; do
-        if [ "\$iface" = "eth0" ]; then
+    for iface in $INTERFACES; do
+        if [ "$iface" = "eth0" ]; then
             uci set network.wan='interface'
             uci set network.wan.proto='dhcp'
             uci set network.wan.device='eth0'
@@ -145,84 +68,107 @@ else
             uci set network.wan6.proto='dhcpv6'
             uci set network.wan6.device='eth0'
         else
-            uci add_list network.@device[0].ports="\$iface" 
+            uci add_list network.@device[0].ports="$iface" 
         fi
     done
 fi
 uci commit network
 
-# --- C. 智能大分区挂载保护 ---
+# --- C. 智能大分区挂载与图表目录预设 ---
 if ! lsblk | grep -q sda3; then
-    echo "Detecting unallocated space, creating /dev/sda3..."
     echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
     echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
-    
-    partprobe /dev/sda >/dev/null 2>&1 || block info >/dev/null 2>&1 || true
+    partprobe /dev/sda >/dev/null 2>&1 || true
     sleep 3
-    
     if lsblk | grep -q sda3; then
         mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
     fi
 fi
 
-TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
-if [ -n "\$TARGET_UUID" ]; then
-    echo "config 'global'" > /etc/config/fstab
-    echo "  option  anon_swap   '0'" >> /etc/config/fstab
-    echo "  option  anon_mount  '0'" >> /etc/config/fstab
-    echo "  option  auto_swap   '1'" >> /etc/config/fstab
-    echo "  option  auto_mount  '1'" >> /etc/config/fstab
-    echo "  option  delay_root  '5'" >> /etc/config/fstab
-    echo "  option  check_fs    '0'" >> /etc/config/fstab
-    
+TARGET_UUID=$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
+if [ -n "$TARGET_UUID" ]; then
     uci add fstab mount
-    uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
+    uci set fstab.@mount[-1].uuid="$TARGET_UUID"
     uci set fstab.@mount[-1].target='/mnt/sda3'
     uci set fstab.@mount[-1].enabled='1'
     uci commit fstab
     
+    # 强制挂载并赋予最高权限，确保图表服务绝对能写入
     mkdir -p /mnt/sda3
     mount /dev/sda3 /mnt/sda3 2>/dev/null || true
+    mkdir -p /mnt/sda3/collectd_rrd
+    chmod -R 777 /mnt/sda3/collectd_rrd
 fi
 
-# --- F. 完全使用你原版的图表配置代码 ---
-if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
-    [ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
-    uci set luci_statistics.collectd.enable='1'
-    if [ -d "/mnt/sda3/" ]; then
-        mkdir -p /mnt/sda3/collectd_rrd
-        uci set luci_statistics.collectd_rrdtool=statistics
-        uci set luci_statistics.collectd_rrdtool.enable='1'
-        uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
-    fi
-    uci set luci_statistics.collectd_thermal=statistics
-    uci set luci_statistics.collectd_thermal.enable='1'
-    uci set luci_statistics.collectd_sensors=statistics
-    uci set luci_statistics.collectd_sensors.enable='1'
-    uci set luci_statistics.collectd_interface=statistics
-    uci set luci_statistics.collectd_interface.enable='1'
-    uci set luci_statistics.collectd_interface.ignoreselected='0'
-    uci set luci_statistics.collectd_cpu=statistics
-    uci set luci_statistics.collectd_cpu.enable='1'
-    uci set luci_statistics.collectd_ping=statistics
-    uci set luci_statistics.collectd_ping.enable='1'
-    uci delete luci_statistics.collectd_ping.Hosts 2>/dev/null
-    uci add_list luci_statistics.collectd_ping.Hosts='114.114.114.114'
-    uci add_list luci_statistics.collectd_ping.Hosts='8.8.8.8'
-    uci commit luci_statistics
-    /etc/init.d/collectd enable
-    /etc/init.d/collectd restart
-    touch /etc/collectd_inited
-    echo "Collectd init and config done."
+# --- D. 图表服务基础配置写入 ---
+[ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
+uci set luci_statistics.collectd=statistics
+uci set luci_statistics.collectd.enable='1'
+uci set luci_statistics.collectd_rrdtool=statistics
+uci set luci_statistics.collectd_rrdtool.enable='1'
+uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
+
+uci set luci_statistics.collectd_thermal=statistics
+uci set luci_statistics.collectd_thermal.enable='1'
+uci set luci_statistics.collectd_sensors=statistics
+uci set luci_statistics.collectd_sensors.enable='1'
+uci set luci_statistics.collectd_interface=statistics
+uci set luci_statistics.collectd_interface.enable='1'
+uci set luci_statistics.collectd_interface.ignoreselected='0'
+uci set luci_statistics.collectd_cpu=statistics
+uci set luci_statistics.collectd_cpu.enable='1'
+
+uci set luci_statistics.collectd_ping=statistics
+uci set luci_statistics.collectd_ping.enable='1'
+uci delete luci_statistics.collectd_ping.Hosts 2>/dev/null
+uci add_list luci_statistics.collectd_ping.Hosts='114.114.114.114'
+uci add_list luci_statistics.collectd_ping.Hosts='8.8.8.8'
+uci commit luci_statistics
+
+# --- E. 终极大招：利用系统异步任务，优雅拉起 Wi-Fi 和图表 ---
+# 我们生成一个只需执行一次的延迟脚本，并在后台运行
+cat << 'STARTUP_SCRIPT' > /tmp/startup_delay.sh
+#!/bin/sh
+# 睡 15 秒，等系统所有硬件（包括那个傲娇的 MT7925 网卡）全部通电完毕
+sleep 15
+
+# 强制系统自动探测并生成最新的网卡路径配置（不用再写死 PCI 路径）
+rm -f /etc/config/wireless
+wifi config
+sleep 2
+
+# 如果探测到了网卡，覆盖我们的专属配置
+if uci show wireless | grep -q 'wifi-device'; then
+    for radio in $(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
+        uci set wireless.${radio}.disabled='0'
+        uci set wireless.${radio}.country='AU'
+    done
+    
+    for iface in $(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
+        uci set wireless.${iface}.ssid='mywifi7'
+        uci set wireless.${iface}.encryption='sae-mixed'
+        uci set wireless.${iface}.key='Aa666666'
+        uci set wireless.${iface}.ieee80211w='1'
+    done
+    
+    uci commit wireless
+    wifi reload
 fi
 
-# --- E. 软件源与插件安装 (纯离线秒装模式) ---
+# 在一切网络和 Wi-Fi 就绪后，最后重启图表服务，确保它能抓到所有的网卡
+sleep 3
+/etc/init.d/luci_statistics restart
+/etc/init.d/collectd restart
+STARTUP_SCRIPT
+
+chmod +x /tmp/startup_delay.sh
+# 将脚本推入后台执行，不阻塞当前的 uci-defaults 流程
+/tmp/startup_delay.sh &
+
+# 替换软件源为国内源
 if [ -d "/etc/apk/repositories.d" ]; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
 fi
-
-apk add -q --allow-untrusted /root/*.apk
-rm -f /root/*.apk
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
@@ -252,14 +198,14 @@ PKG_WIFI_BT="-wpad-basic-mbedtls -wpad-basic-wolfssl wpad-openssl \
 kmod-mt7925e kmod-mt7925-firmware \
 kmod-btusb bluez-daemon kmod-input-uinput"
 
-# 包含了你成功画图所需的所有依赖
 PKG_MONITOR="nano htop ethtool tcpdump mtr conntrack iftop screen \
 collectd-mod-thermal collectd-mod-sensors collectd-mod-cpu collectd-mod-ping collectd-mod-interface collectd-mod-rrdtool collectd-mod-iwinfo"
 
 PKG_LUCI_APPS="luci-app-ttyd luci-i18n-ttyd-zh-cn \
 luci-app-ksmbd luci-i18n-ksmbd-zh-cn \
 luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn \
-luci-app-statistics luci-i18n-statistics-zh-cn"
+luci-app-statistics luci-i18n-statistics-zh-cn \
+luci-app-openclash luci-theme-argon"
 
 PACKAGES="$PKG_CORE $PKG_DISK $PKG_DEPENDS $PKG_NETWORK $PKG_WIFI_BT $PKG_MONITOR $PKG_LUCI_APPS"
 
