@@ -6,7 +6,7 @@ ROOTFS_SIZE=${ROOTFS_SIZE:-1024}
 MANAGEMENT_IP=${MANAGEMENT_IP:-192.168.100.1}
 
 if [[ ! "$MANAGEMENT_IP" == *"/"* ]]; then
-    MANAGEMENT_IP="${MANAGEMENT_IP}/24"
+    MANAGEMENT_IP="${MANAGEMENT_IP}/24"
 fi
 
 echo ">>> 1. 自定义固件参数 <<<"
@@ -30,14 +30,14 @@ mkdir -p files/etc/uci-defaults
 echo ">>> 3. 下载第三方 APK 插件与 OpenClash 核心 <<<"
 OPENCLASH_URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
 if [ -n "$OPENCLASH_URL" ]; then
-    echo "正在下载 OpenClash APK..."
-    wget -qO files/root/luci-app-openclash.apk "$OPENCLASH_URL"
+    echo "正在下载 OpenClash APK..."
+    wget -qO files/root/luci-app-openclash.apk "$OPENCLASH_URL"
 fi
 
 ARGON_URL=$(curl -s https://api.github.com/repos/jerrykuku/luci-theme-argon/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
 if [ -n "$ARGON_URL" ]; then
-    echo "正在下载 Argon 主题 APK..."
-    wget -qO files/root/luci-theme-argon.apk "$ARGON_URL"
+    echo "正在下载 Argon 主题 APK..."
+    wget -qO files/root/luci-theme-argon.apk "$ARGON_URL"
 fi
 
 echo "正在下载 OpenClash Meta 兼容版内核..."
@@ -71,166 +71,155 @@ INTERFACES=\$(ls /sys/class/net | grep -E '^eth[0-9]+' | sort)
 PORT_COUNT=\$(echo "\$INTERFACES" | wc -w)
 
 if [ "\$PORT_COUNT" -eq 1 ]; then
-    uci add_list network.@device[0].ports='eth0'
-    uci delete network.wan 2>/dev/null
-    uci delete network.wan6 2>/dev/null
+    uci add_list network.@device[0].ports='eth0'
+    uci delete network.wan 2>/dev/null
+    uci delete network.wan6 2>/dev/null
 else
-    for iface in \$INTERFACES; do
-        if [ "\$iface" = "eth0" ]; then
-            uci set network.wan='interface'
-            uci set network.wan.proto='dhcp'
-            uci set network.wan.device='eth0'
-            uci set network.wan6='interface'
-            uci set network.wan6.proto='dhcpv6'
-            uci set network.wan6.device='eth0'
-        else
-            uci add_list network.@device[0].ports="\$iface" 
-        fi
-    done
+    for iface in \$INTERFACES; do
+        if [ "\$iface" = "eth0" ]; then
+            uci set network.wan='interface'
+            uci set network.wan.proto='dhcp'
+            uci set network.wan.device='eth0'
+            uci set network.wan6='interface'
+            uci set network.wan6.proto='dhcpv6'
+            uci set network.wan6.device='eth0'
+        else
+            uci add_list network.@device[0].ports="\$iface" 
+        fi
+    done
 fi
 uci commit network
 
 # --- C. 智能大分区挂载保护 ---
 if ! lsblk | grep -q sda3; then
-    echo "Detecting unallocated space, creating /dev/sda3..."
-    echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
-    echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
-    
-    partprobe /dev/sda >/dev/null 2>&1 || block info >/dev/null 2>&1 || true
-    sleep 3
-    
-    if lsblk | grep -q sda3; then
-        mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
-    fi
+    echo "Detecting unallocated space, creating /dev/sda3..."
+    echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
+    echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
+    
+    partprobe /dev/sda >/dev/null 2>&1 || block info >/dev/null 2>&1 || true
+    sleep 3
+    
+    if lsblk | grep -q sda3; then
+        mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
+    fi
 fi
 
 TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
 if [ -n "\$TARGET_UUID" ]; then
-    echo "config 'global'" > /etc/config/fstab
-    echo "  option  anon_swap   '0'" >> /etc/config/fstab
-    echo "  option  anon_mount  '0'" >> /etc/config/fstab
-    echo "  option  auto_swap   '1'" >> /etc/config/fstab
-    echo "  option  auto_mount  '1'" >> /etc/config/fstab
-    echo "  option  delay_root  '5'" >> /etc/config/fstab
-    echo "  option  check_fs    '0'" >> /etc/config/fstab
-    
-    uci add fstab mount
-    uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
-    uci set fstab.@mount[-1].target='/mnt/sda3'
-    uci set fstab.@mount[-1].enabled='1'
-    uci commit fstab
-    
-    mkdir -p /mnt/sda3
-    mount /dev/sda3 /mnt/sda3 2>/dev/null || block mount
+    echo "config 'global'" > /etc/config/fstab
+    echo "  option  anon_swap   '0'" >> /etc/config/fstab
+    echo "  option  anon_mount  '0'" >> /etc/config/fstab
+    echo "  option  auto_swap   '1'" >> /etc/config/fstab
+    echo "  option  auto_mount  '1'" >> /etc/config/fstab
+    echo "  option  delay_root  '5'" >> /etc/config/fstab
+    echo "  option  check_fs    '0'" >> /etc/config/fstab
+    
+    uci add fstab mount
+    uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
+    uci set fstab.@mount[-1].target='/mnt/sda3'
+    uci set fstab.@mount[-1].enabled='1'
+    uci commit fstab
+    
+    mkdir -p /mnt/sda3
+    mount /dev/sda3 /mnt/sda3 2>/dev/null || block mount
 fi
 
 # --- D. 基础性能监控配置 ---
 if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
-    [ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
-    uci set luci_statistics.collectd.enable='1'
-    
-    mkdir -p /mnt/sda3/collectd_rrd
-    uci set luci_statistics.collectd_rrdtool=statistics
-    uci set luci_statistics.collectd_rrdtool.enable='1'
-    uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
+    [ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
+    uci set luci_statistics.collectd.enable='1'
+    
+    mkdir -p /mnt/sda3/collectd_rrd
+    uci set luci_statistics.collectd_rrdtool=statistics
+    uci set luci_statistics.collectd_rrdtool.enable='1'
+    uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
 
-    uci set luci_statistics.collectd_thermal=statistics
-    uci set luci_statistics.collectd_thermal.enable='1'
-    uci set luci_statistics.collectd_sensors=statistics
-    uci set luci_statistics.collectd_sensors.enable='1'
-    uci set luci_statistics.collectd_interface=statistics
-    uci set luci_statistics.collectd_interface.enable='1'
-    uci set luci_statistics.collectd_interface.ignoreselected='0'
-    uci set luci_statistics.collectd_cpu=statistics
-    uci set luci_statistics.collectd_cpu.enable='1'
+    uci set luci_statistics.collectd_thermal=statistics
+    uci set luci_statistics.collectd_thermal.enable='1'
+    uci set luci_statistics.collectd_sensors=statistics
+    uci set luci_statistics.collectd_sensors.enable='1'
+    uci set luci_statistics.collectd_interface=statistics
+    uci set luci_statistics.collectd_interface.enable='1'
+    uci set luci_statistics.collectd_interface.ignoreselected='0'
+    uci set luci_statistics.collectd_cpu=statistics
+    uci set luci_statistics.collectd_cpu.enable='1'
 
-    uci set luci_statistics.collectd_ping=statistics
-    uci set luci_statistics.collectd_ping.enable='1'
-    uci delete luci_statistics.collectd_ping.Hosts 2>/dev/null
-    uci add_list luci_statistics.collectd_ping.Hosts='114.114.114.114'
-    uci add_list luci_statistics.collectd_ping.Hosts='8.8.8.8'
+    uci set luci_statistics.collectd_ping=statistics
+    uci set luci_statistics.collectd_ping.enable='1'
+    uci delete luci_statistics.collectd_ping.Hosts 2>/dev/null
+    uci add_list luci_statistics.collectd_ping.Hosts='114.114.114.114'
+    uci add_list luci_statistics.collectd_ping.Hosts='8.8.8.8'
 
-    uci commit luci_statistics
-    /etc/init.d/collectd enable
-    
-    touch /etc/collectd_inited
+    uci commit luci_statistics
+    /etc/init.d/collectd enable
+    
+    touch /etc/collectd_inited
 fi
 
-# --- E. 守护进程：异步智能加载双频 WiFi 与 重启统计服务 ---
+# --- E. 守护进程：异步抓取硬件 Path 并写入你的专属 WiFi 模板 ---
 cat << 'INITSCRIPT' > /etc/init.d/firstboot-async-setup
 #!/bin/sh /etc/rc.common
 START=99
 
 start() {
-    (
-        for i in \$(seq 1 30); do
-            # 探测物理网卡
-            wifi config
-            
-            # 检查系统是否已经成功生成了无线配置
-            if uci get wireless.@wifi-device[0] >/dev/null 2>&1; then
-                
-                # 【核心修复】：智能遍历所有被识别的网卡（解决 2.4G 和 5G 错位问题）
-                for radio in \$(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
-                    
-                    uci set wireless.\${radio}.disabled='0'
-                    uci set wireless.\${radio}.country='AU'
-                    uci set wireless.\${radio}.cell_density='0'
-                    
-                    # 获取当前这块网卡的频段
-                    band=\$(uci get wireless.\${radio}.band 2>/dev/null)
-                    
-                    if [ "\$band" = "5g" ]; then
-                        uci set wireless.\${radio}.channel='149'
-                        uci set wireless.\${radio}.htmode='EHT80'
-                        uci set wireless.\${radio}.txpower='23'
-                    elif [ "\$band" = "2g" ]; then
-                        uci set wireless.\${radio}.channel='1'
-                        uci set wireless.\${radio}.htmode='HE40'
-                        uci set wireless.\${radio}.txpower='20'
-                    fi
-                    
-                    # 设置对应的 Wi-Fi 信号名称
-                    if uci get wireless.default_\${radio} >/dev/null 2>&1; then
-                        if [ "\$band" = "5g" ]; then
-                            uci set wireless.default_\${radio}.ssid='mywifi7_5G'
-                        else
-                            uci set wireless.default_\${radio}.ssid='mywifi7_2.4G'
-                        fi
-                        
-                        uci set wireless.default_\${radio}.encryption='sae-mixed'
-                        uci set wireless.default_\${radio}.key='Aa666666'
-                        
-                        # 【核心修复 2】：WPA3 加密强制要求开启管理帧保护 (PMF)
-                        uci set wireless.default_\${radio}.ieee80211w='1'
-                        
-                        uci set wireless.default_\${radio}.network='lan'
-                        uci set wireless.default_\${radio}.mode='ap'
-                    fi
-                done
-                
-                uci commit wireless
-                wifi reload
-                break
-            fi
-            sleep 2
-        done
-        
-        # 网卡就绪后，重启 collectd 服务让图表生效
-        /etc/init.d/collectd restart
-        
-        /etc/init.d/firstboot-async-setup disable
-        rm -f /etc/init.d/firstboot-async-setup
-    ) &
+    (
+        # 1. 循环探测，强制系统生成无线配置
+        for i in \$(seq 1 30); do
+            wifi config
+            if uci get wireless.@wifi-device[0] >/dev/null 2>&1; then
+                break
+            fi
+            sleep 2
+        done
+        
+        # 2. 提取出真实的硬件 pci 路径
+        REAL_PATH=\$(uci get wireless.@wifi-device[0].path 2>/dev/null)
+        
+        # 3. 如果成功获取到了路径，直接用你要求的模板覆盖写入
+        if [ -n "\$REAL_PATH" ]; then
+            cat << EOF_WIFI > /etc/config/wireless
+config wifi-device 'radio0'
+	option type 'mac80211'
+	option path '\${REAL_PATH}'
+	option band '5g'
+	option channel '149'
+	option htmode 'EHT80'
+	option country 'AU'
+	option cell_density '0'
+	option txpower '23'
+
+config wifi-iface 'default_radio0'
+	option device 'radio0'
+	option network 'lan'
+	option mode 'ap'
+	option ssid 'mywifi7'
+	option encryption 'sae-mixed'
+	option key 'Aa666666'
+	option ieee80211w '1'
+EOF_WIFI
+
+            # 重新加载无线，让模板生效
+            wifi reload
+            
+            # 重启统计服务，确保网络接口被加入监控图表
+            sleep 3
+            /etc/init.d/luci_statistics restart
+            /etc/init.d/collectd restart
+        fi
+        
+        # 销毁潜伏脚本
+        /etc/init.d/firstboot-async-setup disable
+        rm -f /etc/init.d/firstboot-async-setup
+    ) &
 }
 INITSCRIPT
 
 chmod +x /etc/init.d/firstboot-async-setup
 /etc/init.d/firstboot-async-setup enable
 
-# --- F. 软件源与插件安装 ---
+# --- F. 软件源与插件安装 (纯离线秒装模式) ---
 if [ -d "/etc/apk/repositories.d" ]; then
-    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
+    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
 fi
 
 apk add -q --allow-untrusted /root/*.apk
