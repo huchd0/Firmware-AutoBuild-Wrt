@@ -54,12 +54,15 @@ echo "正在注入 MT7925 官方底层固件..."
 
 # 1. 创建精确的层级目录
 mkdir -p files/lib/firmware/mediatek/mt7925
-# 2. 下载蓝牙固件 (注意：已修复！MT7925 的蓝牙固件也在 mt7925/ 子目录下)
+
+# 2. 下载蓝牙固件 (注意路径：在 mt7925/ 子目录下)
 wget -qO files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin \
 "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin"
+
 # 3. 下载 Wi-Fi 固件 
 wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin \
 "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin"
+
 wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin \
 "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
 
@@ -99,22 +102,17 @@ uci commit network
 # --- C. 智能大分区挂载保护 ---
 if ! lsblk | grep -q sda3; then
     echo "Detecting unallocated space, creating /dev/sda3..."
-    # 修复可能存在的 GPT 表尾部错误，并保存
     echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
-    # 自动新建第三分区并使用全部剩余空间
     echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
     
-    # 【改动在这里】使用 partprobe 刷新分区表，如果失败则尝试 block info 触发
     partprobe /dev/sda >/dev/null 2>&1 || block info >/dev/null 2>&1 || true
     sleep 3
     
-    # 格式化
     if lsblk | grep -q sda3; then
         mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
     fi
 fi
 
-# 动态获取 sda3 的 UUID 并配置挂载
 TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
 if [ -n "\$TARGET_UUID" ]; then
     echo "config 'global'" > /etc/config/fstab
@@ -132,12 +130,35 @@ if [ -n "\$TARGET_UUID" ]; then
     uci commit fstab
 fi
 
-# --- D. 软件源与插件安装 (纯离线秒装模式) ---
+# --- D. 自动初始化 Wi-Fi 黄金设置 (自适应硬件路径) ---
+# 强制系统探测物理网卡生成基础配置
+wifi config
+
+# 确认 radio0 存在后，精准覆盖参数
+if uci get wireless.radio0 >/dev/null 2>&1; then
+    uci set wireless.radio0.disabled='0'
+    uci set wireless.radio0.band='5g'
+    uci set wireless.radio0.channel='149'
+    uci set wireless.radio0.htmode='EHT80'
+    uci set wireless.radio0.country='AU'
+    uci set wireless.radio0.cell_density='0'
+    uci set wireless.radio0.txpower='23'
+    
+    uci set wireless.default_radio0.ssid='mywifi7'
+    uci set wireless.default_radio0.encryption='sae-mixed'
+    uci set wireless.default_radio0.key='Aa666666'
+    uci set wireless.default_radio0.ieee80211w='0'
+    uci set wireless.default_radio0.network='lan'
+    uci set wireless.default_radio0.mode='ap'
+    
+    uci commit wireless
+fi
+
+# --- E. 软件源与插件安装 (纯离线秒装模式) ---
 if [ -d "/etc/apk/repositories.d" ]; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
 fi
 
-# 直接执行本地安装，因为依赖已经在打包时放入 PACKAGES 中了
 apk add -q --allow-untrusted /root/*.apk
 rm -f /root/*.apk
 
@@ -162,14 +183,14 @@ kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat kmod-fs-exfat"
 PKG_DEPENDS="coreutils-nohup coreutils-base64 coreutils-sort bash jq curl ca-bundle \
 libcap libcap-bin ruby ruby-yaml unzip"
 
-# 4. 网络底层驱动与防火墙扩展 (代理与有线网络全能支持)
+# 4. 网络底层驱动与防火墙扩展 (全网卡兜底)
 PKG_NETWORK="ip-full iptables-mod-tproxy iptables-mod-extra kmod-tun kmod-inet-diag \
 kmod-nft-tproxy \
 kmod-igc kmod-igb kmod-r8169 \
 iwinfo"
 
 # 5. 无线与蓝牙扩展 (MT7925 专属增强)
-# 强制移除默认简版 wpad，替换为 openssl 完整版以支持更高级的加密(如 WPA3)
+# 强制移除默认简版 wpad，替换为 openssl 完整版以支持 WPA3 等高级特性
 PKG_WIFI_BT="-wpad-basic-mbedtls -wpad-basic-wolfssl wpad-openssl \
 kmod-mt7925e kmod-mt7925-firmware \
 kmod-btusb bluez-daemon kmod-input-uinput"
