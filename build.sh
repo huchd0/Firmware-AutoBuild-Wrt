@@ -115,8 +115,8 @@ if [ -n "\$TARGET_UUID" ]; then
     mount /dev/sda3 /mnt/sda3 2>/dev/null || block mount
 fi
 
-# --- D. 基础性能监控配置 (彻底修复图表丢失问题) ---
-if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
+# --- D. 基础性能监控配置 ---
+if [ -x "/etc/init.d/collectd" ]; then
     [ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
     uci set luci_statistics.collectd.enable='1'
     
@@ -127,14 +127,11 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
 
     uci set luci_statistics.collectd_thermal=statistics
     uci set luci_statistics.collectd_thermal.enable='1'
-    
     uci set luci_statistics.collectd_sensors=statistics
     uci set luci_statistics.collectd_sensors.enable='1'
-    
     uci set luci_statistics.collectd_interface=statistics
     uci set luci_statistics.collectd_interface.enable='1'
     uci set luci_statistics.collectd_interface.ignoreselected='0'
-    
     uci set luci_statistics.collectd_cpu=statistics
     uci set luci_statistics.collectd_cpu.enable='1'
 
@@ -146,76 +143,51 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
 
     uci commit luci_statistics
     
-    # 核心修复：必须先启动 luci_statistics 编译配置，再启动 collectd
     /etc/init.d/luci_statistics enable
     /etc/init.d/luci_statistics restart
     /etc/init.d/collectd enable
     /etc/init.d/collectd restart
-    
-    touch /etc/collectd_inited
 fi
 
-# --- E. 绝对追踪守护进程：强制修改统一 SSID 并开启 Wi-Fi ---
-cat << 'WATCHER' > /etc/init.d/wifi-watcher
-#!/bin/sh /etc/rc.common
-START=99
-
-start() {
-    (
-        # 最多等待 60 秒，等待系统生成无线配置文件
-        for i in \$(seq 1 20); do
-            if uci show wireless | grep -q "=wifi-device"; then
-                break
-            fi
-            wifi config
+# --- E. 极速潜伏进程：暴力修改 SSID 并自动开启 Wi-Fi ---
+# 完美修复了语法问题，现在它会在后台安静等待网卡就绪，然后一套连招改名并开启
+(
+    for i in \$(seq 1 20); do
+        wifi config
+        if uci get wireless.radio0 >/dev/null 2>&1; then
+            # 找到网卡了，给它 3 秒钟冷静一下
             sleep 3
-        done
-        
-        # 无论系统生成多少个网卡，全部强制开启
-        for radio in \$(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
-            uci set wireless.\${radio}.disabled='0'
             
-            # 绝对追踪接口，无视接口乱码名称，全部统一改名为 mywifi7
-            for iface in \$(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
-                # 如果这个接口属于当前网卡，就强行打上你的密码和统一的名字
-                if [ "\$(uci get wireless.\${iface}.device)" = "\${radio}" ]; then
-                    uci set wireless.\${iface}.ssid='mywifi7'
-                    uci set wireless.\${iface}.encryption='sae-mixed'
-                    uci set wireless.\${iface}.key='Aa666666'
-                    uci set wireless.\${iface}.ieee80211w='1'
-                    uci set wireless.\${iface}.network='lan'
-                    uci set wireless.\${iface}.mode='ap'
-                fi
+            # 开启所有找到的物理网卡
+            RADIOS=\$(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1)
+            for radio in \$RADIOS; do
+                uci set wireless.\${radio}.disabled='0'
+                uci set wireless.\${radio}.country='AU'
             done
-        done
-        
-        uci commit wireless
-        wifi reload
-        
-        # Wi-Fi 开启后，再重启一次统计服务，确保抓到所有无线网卡的流量
-        sleep 5
-        /etc/init.d/luci_statistics restart
-        /etc/init.d/collectd restart
-        
-        # 任务完成，自我销毁
-        /etc/init.d/wifi-watcher disable
-        rm -f /etc/init.d/wifi-watcher
-    ) &
-}
-WATCHER
+            
+            # 把所有找到的 WiFi 信号名字全改成 mywifi7，并设置密码
+            IFACES=\$(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1)
+            for iface in \$IFACES; do
+                uci set wireless.\${iface}.ssid='mywifi7'
+                uci set wireless.\${iface}.encryption='sae-mixed'
+                uci set wireless.\${iface}.key='Aa666666'
+                uci set wireless.\${iface}.ieee80211w='1'
+            done
+            
+            uci commit wireless
+            wifi reload
+            
+            # WiFi开启后，刷新一下统计图表，让它能抓到 WiFi 的流量
+            sleep 5
+            /etc/init.d/luci_statistics restart
+            /etc/init.d/collectd restart
+            
+            break
+        fi
+        sleep 3
+    done
+) &
 
-chmod +x /etc/init.d/wifi-watcher
-/etc/init.d/wifi-watcher enable
-
-# --- F. 软件源与插件安装 ---
-if [ -d "/etc/apk/repositories.d" ]; then
-    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
-fi
-
-apk add -q --allow-untrusted /root/*.apk
-rm -f /root/*.apk
-
-rm -f /etc/uci-defaults/99-custom-setup
 exit 0
 EOF
 
