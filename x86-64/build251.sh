@@ -72,14 +72,22 @@ if [ -n "\$REAL_UUID" ]; then
     uci commit fstab
 fi
 
-# --- 换源与离线安装 ---
-sed -i 's/downloads.immortalwrt.org/mirrors.ustc.edu.cn\/immortalwrt/g' /etc/opkg/distfeeds.conf
-opkg update
-opkg install /root/*.ipk
-rm -rf /root/*.ipk /etc/uci-defaults/99-custom-setup
-exit 0
-EOF
-chmod +x files/etc/uci-defaults/99-custom-setup
+# 智能适配 apk 或 opkg 换源
+if [ -d "/etc/apk/repositories.d" ]; then
+    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
+    sed -i 's/downloads.immortalwrt.org/mirrors.ustc.edu.cn\/immortalwrt/g' /etc/apk/repositories.d/*.list
+elif [ -f "/etc/opkg/distfeeds.conf" ]; then
+    sed -i 's/downloads.immortalwrt.org/mirrors.ustc.edu.cn\/immortalwrt/g' /etc/opkg/distfeeds.conf
+fi
+
+# 智能安装插件
+if command -v apk >/dev/null; then
+    apk add -q --allow-untrusted /root/*.apk 2>/dev/null
+    apk add -q --allow-untrusted /root/*.ipk 2>/dev/null
+else
+    opkg update
+    opkg install /root/*.ipk
+fi
 
 echo ">>> 5. 定义软件包 (适配 ImmortalWrt) <<<"
 PACKAGES="-dnsmasq dnsmasq-full luci luci-base luci-compat luci-i18n-base-zh-cn \
