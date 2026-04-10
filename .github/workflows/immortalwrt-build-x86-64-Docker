@@ -1,4 +1,4 @@
-name: immortalwrt-build-x86-64（Docker）
+name: immortalwrt-build-x86-64-Docker
 
 on:
   workflow_dispatch:
