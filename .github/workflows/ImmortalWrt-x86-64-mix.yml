@@ -31,10 +31,10 @@ jobs:
       - name: Checkout 代码
         uses: actions/checkout@v4
 
-      - name: 🐳 准备构建环境
+      - name: 🐳 准备极简输出目录
         run: |
-          # 提前在 GitHub 宿主机上建好你代码里需要的目录
-          mkdir -p ${{ github.workspace }}/bin/targets/x86/64/
+          # 直接在当前工作区建一个简单粗暴的输出文件夹
+          mkdir -p ${{ github.workspace }}/output-firmware
           
           # 修复脚本换行符并赋予权限
           sed -i 's/\r$//' x86-64/build_ImmortalWrt_mix.sh
@@ -54,17 +54,18 @@ jobs:
             "$DOCKER_IMAGE" \
             /bin/bash -c "cp /workspace/x86-64/build_ImmortalWrt_mix.sh . && \
             ./build_ImmortalWrt_mix.sh && \
-            echo '>>> 编译成功！正在将固件移交回 GitHub 宿主机...' && \
-            cp -r bin/targets/x86/64/* /workspace/bin/targets/x86/64/ 2>/dev/null || true"
+            echo '>>> 🎯 编译成功！当前容器生成的文件如下：' && \
+            ls -lh bin/targets/x86/64/ && \
+            echo '>>> 正在将所有固件文件转移到宿主机 output-firmware 目录...' && \
+            cp bin/targets/x86/64/* /workspace/output-firmware/ -r"
 
       - name: 📦 Upload ImmortalWrt as release assets
         uses: softprops/action-gh-release@v2.4.1
         with:
           tag_name: ${{ inputs.openwrt_version }}-${{ github.run_id }}
           name: ImmortalWrt ${{ inputs.openwrt_version }} [${{ inputs.custom_ip }}]
-          # 这里完美使用了你提供的提取路径和通配符
+          # 这里采用“全量通配”，只要是放到输出文件夹里的文件全抓取
           files: |
-            ${{ github.workspace }}/bin/targets/x86/64/*squashfs-combined-efi.img.gz
-            ${{ github.workspace }}/bin/targets/x86/64/sha256sums
+            output-firmware/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
