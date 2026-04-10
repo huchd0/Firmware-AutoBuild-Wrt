@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e 
+set -e
 
 # 终端输出颜色定义
 GREEN='\033[0;32m'
@@ -9,7 +9,7 @@ NC='\033[0m' # 无颜色
 
 echo "========================================================="
 echo -e "🕒 [$(date '+%Y-%m-%d %H:%M:%S')] ${BLUE}开始构建流程...${NC}"
-echo -e "📦 目标分区大小: ${GREEN}$PROFILE MB${NC}"
+echo -e "📦 目标 RootFS 分区大小: ${GREEN}${ROOTFS_SIZE:-1024} MB${NC}"
 echo "========================================================="
 
 # >>> 1. 自定义固件参数 (注入 .config) <<<
@@ -39,16 +39,78 @@ if [ -f "shell/custom-packages.sh" ]; then
 fi
 
 # >>> 3. 自动化初始化脚本 (UCI Defaults) <<<
+# 读取由 GitHub Actions 映射过来的 IP 地址文件
+if [ -f "files/etc/config/custom_router_ip.txt" ]; then
+    CUSTOM_ROUTER_IP=$(cat files/etc/config/custom_router_ip.txt)
+else
+    CUSTOM_ROUTER_IP="192.168.100.1"
+fi
+
 echo -e "${YELLOW}🔧 写入系统初始化配置 (LAN IP: $CUSTOM_ROUTER_IP)...${NC}"
-INIT_SETTING="/home/build/immortalwrt/files/etc/uci-defaults/99-init-settings"
+INIT_SETTING="files/etc/uci-defaults/99-init-settings"
 mkdir -p "$(dirname "$INIT_SETTING")"
 
+# 写入基础网络配置
 cat << EOF > "$INIT_SETTING"
 #!/bin/sh
 # 设置 LAN 口 IP
 uci set network.lan.ipaddr='$CUSTOM_ROUTER_IP'
 uci commit network
-# 运行一次后自删除
+EOF
+
+# 判断并写入 PPPoE 拨号配置
+if [ "$ENABLE_PPPOE" == "yes" ]; then
+    echo "📝 注入 PPPoE 宽带拨号信息..."
+    cat << EOF >> "$INIT_SETTING"
+
+# 设置 WAN 口 PPPoE 拨号
+uci set network.wan.proto='pppoe'
+uci set network.wan.username='$PPPOE_ACCOUNT'
+uci set network.wan.password='$PPPOE_PASSWORD'
+uci commit network
+EOF
+fi
+
+# 判断并写入 Docker 网络和防火墙放行规则
+if [ "$INCLUDE_DOCKER" == "yes" ]; then
+    echo "🐳 注入 Docker 专属网络与防火墙规则..."
+    cat << EOF >> "$INIT_SETTING"
+
+# 1. 注册 Docker 虚拟网卡 (方便在 LuCI 网络界面查看)
+uci set network.docker=interface
+uci set network.docker.proto='none'
+uci set network.docker.device='docker0'
+uci commit network
+
+# 2. 创建 Docker 防火墙区域
+uci set firewall.docker=zone
+uci set firewall.docker.name='docker'
+uci set firewall.docker.network='docker'
+uci set firewall.docker.input='ACCEPT'
+uci set firewall.docker.output='ACCEPT'
+uci set firewall.docker.forward='ACCEPT'
+
+# 3. 允许 Docker 容器访问外网 (Docker -> WAN)
+uci set firewall.docker_to_wan=forwarding
+uci set firewall.docker_to_wan.src='docker'
+uci set firewall.docker_to_wan.dest='wan'
+
+# 4. 允许局域网设备访问 Docker 容器 (LAN <-> Docker 双向)
+uci set firewall.docker_to_lan=forwarding
+uci set firewall.docker_to_lan.src='docker'
+uci set firewall.docker_to_lan.dest='lan'
+uci set firewall.lan_to_docker=forwarding
+uci set firewall.lan_to_docker.src='lan'
+uci set firewall.lan_to_docker.dest='docker'
+
+uci commit firewall
+EOF
+fi
+
+# 追加自删除命令
+cat << EOF >> "$INIT_SETTING"
+
+# 运行一次后自删除，保持系统干净
 rm -f /etc/uci-defaults/99-init-settings
 exit 0
 EOF
@@ -66,8 +128,15 @@ NET_PKGS="luci-i18n-firewall-zh-cn luci-i18n-upnp-zh-cn luci-i18n-autoreboot-zh-
 # 科学上网
 PROXY_PKGS="luci-app-openclash"
 
+# 处理 Docker 插件需求
+DOCKER_PKGS=""
+if [ "$INCLUDE_DOCKER" == "yes" ]; then
+    echo -e "${YELLOW}🐳 已开启 Docker 支持，正在追加相关依赖包...${NC}"
+    DOCKER_PKGS="luci-app-dockerman dockerd docker-compose"
+fi
+
 # 合并所有包
-PACKAGES="$BASE_PKGS $THEME_PKGS $NET_PKGS $PROXY_PKGS $CUSTOM_PACKAGES"
+PACKAGES="$BASE_PKGS $THEME_PKGS $NET_PKGS $PROXY_PKGS $DOCKER_PKGS $CUSTOM_PACKAGES"
 
 # >>> 5. OpenClash 核心预集成 (优化版) <<<
 if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
@@ -75,15 +144,15 @@ if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
     CORE_PATH="files/etc/openclash/core"
     mkdir -p "$CORE_PATH"
     
-    # 镜像站加速地址
-    META_URL="https://mirror.ghproxy.com/https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64.tar.gz"
+    # 使用更稳定的镜像加速节点
+    META_URL="https://ghp.ci/https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64.tar.gz"
     
-    # 下载并解压，带超时保护
-    if wget -q --show-progress -T 10 -t 2 -O- "$META_URL" | tar xOvz > "$CORE_PATH/clash_meta"; then
+    # 下载并解压，增加超时和重试机制
+    if wget -q --show-progress -T 15 -t 3 -O- "$META_URL" | tar xOvz > "$CORE_PATH/clash_meta"; then
         chmod +x "$CORE_PATH/clash_meta"
         echo -e "${GREEN}✅ Meta 核心预装成功${NC}"
     else
-        echo -e "${YELLOW}⚠️ 核心下载失败或超时，编译将继续，请稍后手动更新。${NC}"
+        echo -e "${YELLOW}⚠️ 核心下载失败或超时，编译将继续，请稍后在路由后台手动更新。${NC}"
     fi
 fi
 
@@ -93,12 +162,12 @@ echo -e "${BLUE}🛠️ 正在调用镜像构建器 (使用多核加速)...${NC}
 # 自动获取 CPU 核心数加速打包进程
 make image PROFILE="generic" \
            PACKAGES="$PACKAGES" \
-           FILES="/home/build/immortalwrt/files" \
-           ROOTFS_PARTSIZE=$PROFILE \
+           FILES="files" \
+           ROOTFS_PARTSIZE=${ROOTFS_SIZE:-1024} \
            -j$(nproc)
 
 # >>> 7. 结束提示 <<<
 echo "========================================================="
 echo -e "🎉 [$(date '+%Y-%m-%d %H:%M:%S')] ${GREEN}固件编译成功！${NC}"
-echo -e "📂 固件存放位置: ${BLUE}bin/targets/x86/64/${NC} (以实际架构为准)"
+echo -e "📂 固件存放位置: ${BLUE}bin/targets/x86/64/${NC}"
 echo "========================================================="
