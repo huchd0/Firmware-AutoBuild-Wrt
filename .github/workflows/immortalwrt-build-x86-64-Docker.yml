@@ -88,6 +88,10 @@ jobs:
           
           echo "🚀 开始基于 $LUCI_VERSION 构建，RootFS 大小: ${ROOTFS_SIZE}MB"
           
+          # 💡 新增这一行：确保源文件存在，防止 Docker 自动生成错误类型的文件夹
+          mkdir -p ${{ github.workspace }}/x86-64
+          touch ${{ github.workspace }}/x86-64/imm25.config
+          
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
