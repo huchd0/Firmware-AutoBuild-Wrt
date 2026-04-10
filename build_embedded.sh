@@ -51,4 +51,4 @@ luci-app-statistics luci-i18n-statistics-zh-cn \
 coreutils-nohup block-mount kmod-fs-ext4"
 
 # 6. 执行构建
-make image PROFILE="$DEVICE_PROFILE" PACKAGES="$PKGS" FILES="files"
+make info
