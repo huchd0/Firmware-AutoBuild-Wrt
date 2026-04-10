@@ -1,4 +1,4 @@
-name: ImmortalWrt-x86-64-mix
+name: immortalwrt-x86-64-mix
 
 on:
   workflow_dispatch:
