@@ -4,22 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       openwrt_version:
-        description: "选择 ImmortalWrt 版本 (Docker Tag)"
+        description: '选择 ImmortalWrt 版本 (Docker Tag)'
         required: false
-        default: "25.12.0-rc1" 
+        default: '25.12.0-rc1'
         type: choice
         options:
-          - 25.12.0-rc1
-          - 24.10.5
-          - 23.05.4
+          - '25.12.0-rc1'
+          - '24.10.5'
+          - '23.05.4'
       custom_router_ip:
-        description: "路由器管理地址 (如 192.168.100.1)"
+        description: '路由器管理地址 (如 192.168.100.1)'
         required: true
-        default: "192.168.100.1"
+        default: '192.168.100.1'
+        type: string
       profile:
         description: 'RootFS 分区大小 (MB)'
         required: true
         default: '1024'
+        type: string
 
 jobs:
   build:
@@ -38,7 +40,7 @@ jobs:
           sed -i 's/\r$//' ${{ github.workspace }}/x86-64/build_ImmortalWrt_mix.sh
           chmod +x ${{ github.workspace }}/x86-64/build_ImmortalWrt_mix.sh
 
-      - name: 🚀 运行 Docker 编译 (通过 Volume 实时传出固件)
+      - name: 🚀 运行 Docker 编译
         run: |
           docker run --rm -i \
             --user root \
