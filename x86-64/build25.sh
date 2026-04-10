@@ -144,11 +144,11 @@ if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
     CORE_PATH="files/etc/openclash/core"
     mkdir -p "$CORE_PATH"
     
-    # 使用更稳定的镜像加速节点
-    META_URL="https://ghp.ci/https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64.tar.gz"
+    # Github Actions 在海外，不需要使用国内镜像代理，直连更稳定且速度极快
+    META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64.tar.gz"
     
-    # 下载并解压，增加超时和重试机制
-    if wget -q --show-progress -T 15 -t 3 -O- "$META_URL" | tar xOvz > "$CORE_PATH/clash_meta"; then
+    # 下载并解压，增加超时到30秒，重试3次
+    if wget -q --show-progress -T 30 -t 3 -O- "$META_URL" | tar xOvz > "$CORE_PATH/clash_meta"; then
         chmod +x "$CORE_PATH/clash_meta"
         echo -e "${GREEN}✅ Meta 核心预装成功${NC}"
     else
