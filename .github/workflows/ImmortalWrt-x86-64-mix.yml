@@ -77,11 +77,11 @@ jobs:
           ROOTFS_SIZE: ${{ inputs.profile }}
           MANAGEMENT_IP: ${{ inputs.custom_ip }}
         run: |
-          sed -i 's/\r$//' x86-64/build251.sh
-          chmod +x x86-64/build251.sh
-          cp x86-64/build251.sh imagebuilder/
+          sed -i 's/\r$//' x86-64/build_ImmortalWrt_mix.sh
+          chmod +x x86-64/build_ImmortalWrt_mix.sh
+          cp x86-64/build_ImmortalWrt_mix.sh imagebuilder/
           cd imagebuilder
-          ./build251.sh
+          ./build_ImmortalWrt_mix.sh
 
       - name: 发布到 Releases
         uses: softprops/action-gh-release@v2
