@@ -1,5 +1,4 @@
 name: build-x86-64-immortalwrt-25.12.x
-# 优化版：修正命名歧义，增加动态 Release 标签与详细固件特性展示
 
 on:
   workflow_dispatch:
