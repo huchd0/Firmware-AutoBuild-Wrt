@@ -33,18 +33,13 @@ jobs:
 
       - name: 🛠️ 准备映射目录与权限
         run: |
-          # 提前创建好映射目录，防止 Docker 以 root 身份创建导致权限锁死
           mkdir -p ${{ github.workspace }}/bin
           mkdir -p ${{ github.workspace }}/files
-          
-          # 修复脚本格式并赋予执行权限 (假设你的脚本在 x86-64 目录下)
           sed -i 's/\r$//' ${{ github.workspace }}/x86-64/build_ImmortalWrt_mix.sh
           chmod +x ${{ github.workspace }}/x86-64/build_ImmortalWrt_mix.sh
 
       - name: 🚀 运行 Docker 编译 (通过 Volume 实时传出固件)
         run: |
-          # 使用 --user root 确保容器内拥有足够权限修改配置，
-          # 官方 ImageBuilder 默认工作目录通常是 /builder。
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/builder/bin" \
