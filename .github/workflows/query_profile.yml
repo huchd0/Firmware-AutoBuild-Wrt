@@ -33,6 +33,7 @@ jobs:
         id: vars
         run: |
           if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
+            # 若 Docker API 抽风限流，静默降级为默认最新版
             LATEST=$(curl -sL --max-time 5 "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100" | jq -r '.results[].name' 2>/dev/null | grep -v "SNAPSHOT" | grep -E "openwrt-[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$" | sed -E 's/.*openwrt-//' | sort -V | tail -n 1 || echo "24.10.5")
             [ -z "$LATEST" ] || [ "$LATEST" == "null" ] && LATEST="24.10.5"
             echo "VERSION=$LATEST" >> $GITHUB_ENV
@@ -124,7 +125,7 @@ jobs:
           "
           
           # ==========================================
-          # ⚙️ 3. 核心翻译引擎 (安全转义版)
+          # ⚙️ 3. 核心翻译引擎 (纯净转义版)
           # ==========================================
           translate() {
             local input="$1"
@@ -134,11 +135,8 @@ jobs:
               local matched=0
               while IFS= read -r line; do
                 [[ ! "$line" =~ [^[:space:]] ]] && continue
-                
-                # 采用最安全的底层截取方式，彻底杜绝引号解析错乱
                 local target="(${line##*\(}"
                 local aliases_str="${line%\(*}"
-                
                 IFS='|' read -ra ALIAS_ARRAY <<< "$aliases_str"
                 for raw_alias in "${ALIAS_ARRAY[@]}"; do
                   local clean_alias=$(trim "$raw_alias")
@@ -161,13 +159,13 @@ jobs:
           QUERY_M="${PARSED_MODEL// /.*}"
 
           echo "🔍 引擎启动状态："
-          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [静态爬虫架构遍历 + 云端并发盲搜]"
+          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [云端并发盲搜 - 免疫API流控拦截]"
           [ -n "$QUERY_B" ] && echo "   - 品牌锁定: [$QUERY_B]"
           [ -n "$QUERY_M" ] && echo "   - 型号锁定: [$QUERY_M]"
           echo -e "-------------------------------------------------------\n"
 
           # ==========================================
-          # 🚀 4. 底层提取 (物理写入爬虫脚本，100%免疫语法崩溃)
+          # 🚀 4. 底层提取 (内存级并发函数导出黑科技，完美契合 YAML)
           # ==========================================
           ALL_LIST=""
           
@@ -183,7 +181,6 @@ jobs:
           else
               echo ">>> 正在使用静态网页爬虫深入镜像站底层，抓取全网架构池..."
               
-              # 获取主目录
               TARGETS=$(curl -sL --max-time 10 "https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets/" 2>/dev/null | grep -oE 'href="[a-zA-Z0-9_-]+/"' | cut -d\" -f2 | sed 's/\///g')
               
               if [ -z "$TARGETS" ]; then
@@ -191,43 +188,43 @@ jobs:
                   exit 1
               fi
               
-              export VERSION="${VERSION}"
+              # 注入全局环境变量，供子线程读取
+              export GLOBAL_VER="${VERSION}"
               
-              # === 绝杀技 1：生成实体子目录爬虫脚本 ===
-              cat << 'EOF' > crawler_step1.sh
-#!/bin/bash
-t="$1"
-curl -sL --max-time 10 "https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets/${t}/" 2>/dev/null | grep -oE 'href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g' | sed "s/^/$t-/"
-EOF
-              chmod +x crawler_step1.sh
+              # 【黑科技 1：导出提取子架构的方法】
+              get_sub_arch() {
+                  local t="$1"
+                  curl -sL --max-time 10 "https://mirrors.ustc.edu.cn/immortalwrt/releases/${GLOBAL_VER}/targets/${t}/" 2>/dev/null | \
+                  grep -oE 'href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g' | sed "s/^/$t-/"
+              }
+              export -f get_sub_arch
               
-              ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 10 ./crawler_step1.sh "{}")
+              ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 10 bash -c 'get_sub_arch "{}"')
               
-              echo ">>> 成功突破限制，锁定 $(echo "$ARCH_LIST" | wc -w) 个核心子架构！"
-              echo ">>> 🚦 正在启动【高并发安全通道】抓取完整云端设备库 (预计耗时 10-20 秒)..."
+              echo ">>> 成功锁定 $(echo "$ARCH_LIST" | wc -w) 个核心子架构！"
+              echo ">>> 🚦 正在启动【高并发安全通道】抓取完整云端设备库 (预计耗时 10-15 秒)..."
               
               mkdir -p /tmp/profiles
               
-              # === 绝杀技 2：生成实体 JSON 解析器脚本 ===
-              cat << 'EOF' > crawler_step2.sh
-#!/bin/bash
-arch="$1"
-subpath=$(echo "$arch" | tr "-" "/")
-URL="https://downloads.immortalwrt.org/releases/${VERSION}/targets/${subpath}/profiles.json"
-FALLBACK="https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets/${subpath}/profiles.json"
-
-if ! curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$URL" 2>/dev/null; then
-    curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" 2>/dev/null || true
-fi
-
-if [ -s "/tmp/profiles/${arch}_raw.json" ] && jq -e . "/tmp/profiles/${arch}_raw.json" >/dev/null 2>&1; then
-    jq -r '.profiles | keys[]' "/tmp/profiles/${arch}_raw.json" | awk -v a="$arch" '{print a " : " $1}' > "/tmp/profiles/${arch}.txt"
-fi
-EOF
-              chmod +x crawler_step2.sh
+              # 【黑科技 2：导出安全队列 JSON 抓取解析方法】
+              fetch_json() {
+                  local arch="$1"
+                  local subpath=$(echo "$arch" | tr "-" "/")
+                  local URL="https://downloads.immortalwrt.org/releases/${GLOBAL_VER}/targets/${subpath}/profiles.json"
+                  local FALLBACK="https://mirrors.ustc.edu.cn/immortalwrt/releases/${GLOBAL_VER}/targets/${subpath}/profiles.json"
+                  
+                  if ! curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$URL" 2>/dev/null; then
+                      curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" 2>/dev/null || true
+                  fi
+                  
+                  if [ -s "/tmp/profiles/${arch}_raw.json" ] && jq -e . "/tmp/profiles/${arch}_raw.json" >/dev/null 2>&1; then
+                      jq -r '.profiles | keys[]' "/tmp/profiles/${arch}_raw.json" | awk -v a="$arch" '{print a " : " $1}' > "/tmp/profiles/${arch}.txt"
+                  fi
+              }
+              export -f fetch_json
               
-              # 调用实体脚本进行高并发，安全无毒
-              printf "%s\n" "$ARCH_LIST" | xargs -I {} -P 15 ./crawler_step2.sh "{}"
+              # 完美执行多线程内存级爬虫
+              printf "%s\n" "$ARCH_LIST" | xargs -I {} -P 15 bash -c 'fetch_json "{}"'
               
               cat /tmp/profiles/*.txt > /tmp/all_list.txt 2>/dev/null || true
               ALL_LIST=$(cat /tmp/all_list.txt 2>/dev/null || true)
