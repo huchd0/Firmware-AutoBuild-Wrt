@@ -33,7 +33,6 @@ jobs:
         id: vars
         run: |
           if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
-            # 若 Docker API 抽风限流，静默降级为默认最新版
             LATEST=$(curl -sL --max-time 5 "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100" | jq -r '.results[].name' 2>/dev/null | grep -v "SNAPSHOT" | grep -E "openwrt-[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$" | sed -E 's/.*openwrt-//' | sort -V | tail -n 1 || echo "24.10.5")
             [ -z "$LATEST" ] || [ "$LATEST" == "null" ] && LATEST="24.10.5"
             echo "VERSION=$LATEST" >> $GITHUB_ENV
@@ -125,7 +124,7 @@ jobs:
           "
           
           # ==========================================
-          # ⚙️ 3. 核心翻译引擎 (纯净转义版)
+          # ⚙️ 3. 核心翻译引擎 (物理纯净版)
           # ==========================================
           translate() {
             local input="$1"
@@ -159,13 +158,13 @@ jobs:
           QUERY_M="${PARSED_MODEL// /.*}"
 
           echo "🔍 引擎启动状态："
-          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [云端并发盲搜 - 免疫API流控拦截]"
+          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [静态爬虫遍历 + 云端多线程盲搜]"
           [ -n "$QUERY_B" ] && echo "   - 品牌锁定: [$QUERY_B]"
           [ -n "$QUERY_M" ] && echo "   - 型号锁定: [$QUERY_M]"
           echo -e "-------------------------------------------------------\n"
 
           # ==========================================
-          # 🚀 4. 底层提取 (内存级并发函数导出黑科技，完美契合 YAML)
+          # 🚀 4. 底层提取 (无极 Echo 强刷脚本版，彻底粉碎 YAML 和嵌套报错)
           # ==========================================
           ALL_LIST=""
           
@@ -179,62 +178,55 @@ jobs:
                   exit 1
               fi
           else
-              echo ">>> 正在使用静态网页爬虫深入镜像站底层，抓取全网架构池..."
+              echo ">>> 正在连接底层镜像站，剥离前端外壳抓取全网架构池..."
               
-              TARGETS=$(curl -sL --max-time 10 "https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets/" 2>/dev/null | grep -oE 'href="[a-zA-Z0-9_-]+/"' | cut -d\" -f2 | sed 's/\///g')
+              # 第 1 层：用官网源抓取主架构目录（绕过中科大的前端外壳）
+              TARGETS=$(curl -sL --max-time 10 "https://downloads.immortalwrt.org/releases/${VERSION}/targets/" 2>/dev/null | grep -oE '<a href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g')
               
               if [ -z "$TARGETS" ]; then
-                  echo "❌ 第一级目录抓取失败，请检查网络。"
+                  echo "❌ 目录节点连接失败，请重新执行。"
                   exit 1
               fi
               
-              # 注入全局环境变量，供子线程读取
-              export GLOBAL_VER="${VERSION}"
+              # --- [黑科技核心] 逐行 echo 拼装爬虫 1 号，彻底抛弃嵌套 ---
+              echo '#!/bin/bash' > get_sub.sh
+              echo 't="$1"' >> get_sub.sh
+              echo 'curl -sL --max-time 10 "https://downloads.immortalwrt.org/releases/'"${VERSION}"'/targets/${t}/" 2>/dev/null | grep -oE '\''<a href="[a-zA-Z0-9_-]+/"'\'' | cut -d"\"" -f2 | sed "s/\///g" | sed "s/^/$t-/"' >> get_sub.sh
+              chmod +x get_sub.sh
               
-              # 【黑科技 1：导出提取子架构的方法】
-              get_sub_arch() {
-                  local t="$1"
-                  curl -sL --max-time 10 "https://mirrors.ustc.edu.cn/immortalwrt/releases/${GLOBAL_VER}/targets/${t}/" 2>/dev/null | \
-                  grep -oE 'href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g' | sed "s/^/$t-/"
-              }
-              export -f get_sub_arch
+              ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 10 ./get_sub.sh "{}")
               
-              ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 10 bash -c 'get_sub_arch "{}"')
-              
-              echo ">>> 成功锁定 $(echo "$ARCH_LIST" | wc -w) 个核心子架构！"
-              echo ">>> 🚦 正在启动【高并发安全通道】抓取完整云端设备库 (预计耗时 10-15 秒)..."
+              echo ">>> 成功突破迷雾，锁定 $(echo "$ARCH_LIST" | wc -w) 个独立子架构！"
+              echo ">>> 🚦 正在启动【高并发下载通道】提取海量设备特征 (预计 10-15 秒)..."
               
               mkdir -p /tmp/profiles
               
-              # 【黑科技 2：导出安全队列 JSON 抓取解析方法】
-              fetch_json() {
-                  local arch="$1"
-                  local subpath=$(echo "$arch" | tr "-" "/")
-                  local URL="https://downloads.immortalwrt.org/releases/${GLOBAL_VER}/targets/${subpath}/profiles.json"
-                  local FALLBACK="https://mirrors.ustc.edu.cn/immortalwrt/releases/${GLOBAL_VER}/targets/${subpath}/profiles.json"
-                  
-                  if ! curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$URL" 2>/dev/null; then
-                      curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" 2>/dev/null || true
-                  fi
-                  
-                  if [ -s "/tmp/profiles/${arch}_raw.json" ] && jq -e . "/tmp/profiles/${arch}_raw.json" >/dev/null 2>&1; then
-                      jq -r '.profiles | keys[]' "/tmp/profiles/${arch}_raw.json" | awk -v a="$arch" '{print a " : " $1}' > "/tmp/profiles/${arch}.txt"
-                  fi
-              }
-              export -f fetch_json
+              # --- [黑科技核心] 逐行 echo 拼装爬虫 2 号 ---
+              echo '#!/bin/bash' > fetch_json.sh
+              echo 'arch="$1"' >> fetch_json.sh
+              echo 'subpath=$(echo "$arch" | tr "-" "/")' >> fetch_json.sh
+              echo 'URL="https://downloads.immortalwrt.org/releases/'"${VERSION}"'/targets/${subpath}/profiles.json"' >> fetch_json.sh
+              echo 'FALLBACK="https://mirrors.ustc.edu.cn/immortalwrt/releases/'"${VERSION}"'/targets/${subpath}/profiles.json"' >> fetch_json.sh
+              echo 'if ! curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$URL" 2>/dev/null; then' >> fetch_json.sh
+              echo '    curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" 2>/dev/null || true' >> fetch_json.sh
+              echo 'fi' >> fetch_json.sh
+              echo 'if [ -s "/tmp/profiles/${arch}_raw.json" ] && jq -e . "/tmp/profiles/${arch}_raw.json" >/dev/null 2>&1; then' >> fetch_json.sh
+              echo '    jq -r ".profiles | keys[]" "/tmp/profiles/${arch}_raw.json" | sed "s/^/$arch : /" > "/tmp/profiles/${arch}.txt"' >> fetch_json.sh
+              echo 'fi' >> fetch_json.sh
+              chmod +x fetch_json.sh
               
-              # 完美执行多线程内存级爬虫
-              printf "%s\n" "$ARCH_LIST" | xargs -I {} -P 15 bash -c 'fetch_json "{}"'
+              # 执行无敌多线程
+              printf "%s\n" "$ARCH_LIST" | xargs -I {} -P 15 ./fetch_json.sh "{}"
               
               cat /tmp/profiles/*.txt > /tmp/all_list.txt 2>/dev/null || true
               ALL_LIST=$(cat /tmp/all_list.txt 2>/dev/null || true)
               
               if [ -z "$ALL_LIST" ]; then
-                  echo "❌ 致命错误：数据池抓取失败。"
+                  echo "❌ 致命错误：数据库抓取归零。"
                   exit 1
               fi
               
-              echo ">>> ✅ 全网数据库下载并合并完毕！总计提取到 $(echo "$ALL_LIST" | wc -l) 款设备。"
+              echo ">>> ✅ 全网数据矩阵重组完毕！总计挖掘到 $(echo "$ALL_LIST" | wc -l) 款专属设备。"
           fi
 
           # ==========================================
