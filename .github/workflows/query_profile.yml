@@ -1,4 +1,4 @@
-name: 🔍 Query Device Profile (全网智能查询引擎)
+name: Query Device Profile (全网智能查询🔍)
 
 on:
   workflow_dispatch:
