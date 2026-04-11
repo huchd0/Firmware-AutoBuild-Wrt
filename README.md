@@ -2,7 +2,7 @@ GitHub 编译时用的是openwrt官方源（极速构建），运行阶段被替
 
 不仅适用于 X86 机器，build_embedded.sh 可以给非 x86 架构的路由器（比如红米、华硕的硬路由）编译固件！
 
-嵌入式路由器中芯片决定属于哪个架构(arch)，每一个具体的硬件型号都有自己专属的 Profile 名称（查询方式-->>>禁用build_embedded.sh最后的执行构建后，临时使代码最后一行make info生效运行，在过程中的第四步Run Builder，中间有一行Available Profiles:下面，有很多路由器信息块，第一行冒號左側的字符串（例如 afoundry_ew1200）就是界面中要填入 的设备profile 輸入框的值。
+嵌入式路由器中芯片决定属于哪个架构(arch)，如红米 AX6000 (Redmi AX6000)就是：mediatek-filogic，每一个具体的硬件型号都有自己专属的 Profile 名称（查询方式-->>>禁用build_embedded.sh最后的执行构建后，临时使代码最后一行make info生效运行，在过程中的第四步Run Builder，中间有一行Available Profiles:下面，有很多路由器信息块，第一行冒號左側的字符串（如：xiaomi_redmi-router-ax6000）就是界面中要填入 的设备profile 輸入框的值。
 
 嵌入式设备上，强制执行分区操作往往会导致系统无法启动，所以没有分区报错风险，逻辑也会变得非常简单，因为没有了所有复杂的磁盘分区（fdisk）、UEFI 设置以及针对 PC 的网卡驱动，将专注于嵌入式路由器的核心需求：跨架构内核下载、插件集成和基础网络配置。
 
