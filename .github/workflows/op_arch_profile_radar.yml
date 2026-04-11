@@ -1,25 +1,25 @@
 name: 🔍 OP Arch & Profile Radar (设备号智能寻址雷达)
 
-on:
+于:
   workflow_dispatch:
     inputs:
       arch:
         description: '1. 设备架构 (非必填。留空则全网盲搜)'
         required: false
-        default: ''
+        默认: ''
       brand:
         description: '2. 品牌 (支持中文别名)'
         required: false
-        default: ''
+        默认: ''
       model:
         description: '3. 型号/绰号 (支持中文别名)'
         required: false
-        default: ''
+        默认: ''
       openwrt_version:
         description: '4. 快捷选择主线版本'
         required: false
-        default: 'Auto'
-        type: choice
+        默认: 'Auto'
+        输入: choice
         options:
           - 'Auto'
           - '24.10.5'
@@ -27,7 +27,7 @@ on:
       custom_version:
         description: '5. 寻找失踪机型？请手填旧版本号 (如: 23.05.4。填写即无视上方选项)'
         required: false
-        default: ''
+        默认: ''
 
 jobs:
   query:
