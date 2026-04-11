@@ -1,10 +1,10 @@
-name: Query Device Profile (全网智能查询🔍)
+name: 🔍 Query Device Profile (全网智能查询引擎)
 
 on:
   workflow_dispatch:
     inputs:
       arch:
-        description: '1. 设备架构 (留空则全网盲搜)'
+        description: '1. 设备架构 (非必填。留空则全网盲搜)'
         required: false
         default: ''
       brand:
@@ -25,7 +25,7 @@ on:
           - '24.10.5'
           - '25.12.0-rc1'
       custom_version:
-        description: '5. 寻找被抛弃的旧设备？请手填旧版本号，只要填写，优先于上方选择框 (如: 23.05.4)'
+        description: '5. 寻找失踪机型？请手填旧版本号 (如: 23.05.4。填写即无视上方选项)'
         required: false
         default: ''
 
@@ -33,227 +33,34 @@ jobs:
   query:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🔍 解析核心版本 (引入历史穿越逻辑)
+      - name: 📥 检出代码库 (拉取后台引擎脚本)
+        uses: actions/checkout@v4
+
+      - name: 🔍 解析目标时空与核心版本
         id: vars
         run: |
-          # 优先级 1：如果用户手动输入了老版本，直接强行接管！
+          # 优先级 1：如果手动输入了老版本，启动时光机强行接管！
           if [ -n "${{ inputs.custom_version }}" ]; then
             echo ">>> 启动时光机！强行跳转至历史版本: ${{ inputs.custom_version }}"
             echo "VERSION=${{ inputs.custom_version }}" >> $GITHUB_ENV
             
-          # 优先级 2：自动追踪最新版
+          # 优先级 2：自动追踪 Docker Hub 最新版 (附带防风控限流降级)
           elif [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
             LATEST=$(curl -sL --max-time 5 "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100" | jq -r '.results[].name' 2>/dev/null | grep -v "SNAPSHOT" | grep -E "openwrt-[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$" | sed -E 's/.*openwrt-//' | sort -V | tail -n 1 || echo "24.10.5")
             [ -z "$LATEST" ] || [ "$LATEST" == "null" ] && LATEST="24.10.5"
             echo "VERSION=$LATEST" >> $GITHUB_ENV
             
-          # 优先级 3：使用下拉菜单选中的版本
+          # 优先级 3：使用常规下拉菜单
           else
             echo "VERSION=${{ inputs.openwrt_version }}" >> $GITHUB_ENV
           fi
 
-      - name: 📋 启动智能双擎匹配核心
+      - name: 📋 启动纯净后台引擎
+        env:
+          INPUT_ARCH: ${{ inputs.arch }}
+          INPUT_BRAND: ${{ inputs.brand }}
+          INPUT_MODEL: ${{ inputs.model }}
         run: |
-          echo ">>> 目标环境版本: ${{ env.VERSION }}"
-          echo -e "=======================================================\n"
-          
-          # ==========================================
-          # 📝 1. 净化与防呆逻辑
-          # ==========================================
-          trim() {
-            local s="$1"
-            s="${s#"${s%%[![:space:]]*}"}"
-            s="${s%"${s##*[![:space:]]}"}"
-            echo "$s"
-          }
-
-          RAW_ARCH=$(trim "${{ inputs.arch }}")
-          RAW_BRAND=$(trim "${{ inputs.brand }}")
-          RAW_MODEL=$(trim "${{ inputs.model }}")
-          
-          if [ -z "$RAW_ARCH" ] && [ -z "$RAW_BRAND" ] && [ -z "$RAW_MODEL" ]; then
-             echo "❌ 触发防呆拦截：架构、品牌、型号不能全部为空！请至少填写一项线索。"
-             exit 1
-          fi
-          
-          # ==========================================
-          # 📝 2. 双字典配置
-          # ==========================================
-          BRAND_DICT="
-          小米|mi               (xiaomi)
-          红米                  (redmi)
-          华硕|败家之眼|asus    (asus)
-          普联|tp|tplink        (tplink|tp-link)
-          网件|netgear          (netgear)
-          领势|linksys          (linksys)
-          腾达|tenda            (tenda)
-          水星|mercury          (mercury)
-          中兴|zte              (zte)
-          华为|huawei           (huawei)
-          友讯|dlink            (dlink)
-          华三|h3c              (h3c)
-          锐捷|ruijie           (ruijie)
-          京东云|jd|无线宝      (jdcloud)
-          斐讯|phicomm          (phicomm)
-          新路由|newifi|dteam   (newifi|d-team)
-          极路由|hiwifi         (hiwifi)
-          奇虎|360              (qihoo)
-          移动|中国移动|cmcc    (cmcc)
-          捷稀|jcg              (jcg)
-          广和通|glinet|gl      (glinet)
-          友善|nanopi|friendlyarm (friendlyarm)
-          迅雷|网心云|赚钱宝    (xunlei|onething|thunder)
-          "
-          
-          MODEL_DICT="
-          一代|1代|坐享其成|sp01b   (re-sp-01b)
-          鲁班|2代|二代|cp02        (re-cp-02)
-          亚瑟|ax1800pro|cp03       (re-cp-03)
-          雅典娜|ax6600             (ax6600)
-          百里                      (ax6000)
-          鲁班|cl01             (re-cl-01)
-          k2|k2经典             (k2)
-          k2p|k2p神机           (k2p)
-          k3|k3路由器           (k3)
-          k3c                   (k3c)
-          cr6606|cr6608|cr6609  (cr660x)
-          wr30u|联通wr30u       (wr30u)
-          ax3000t               (ax3000t)
-          ax3600                (ax3600)
-          ax9000                (ax9000)
-          新路由1|y1|mini       (y1)
-          新路由2|d1            (d1)
-          新路由3|d2|newifi3    (d2)
-          r2s                   (nanopi-r2s)
-          r4s                   (nanopi-r4s)
-          r5s                   (nanopi-r5s)
-          r5c                   (nanopi-r5c)
-          r6s                   (nanopi-r6s)
-          t7|360t7              (t7)
-          q20|捷稀q20           (q20)
-          rax3000m|移动rax3000m (rax3000m)
-          e8820s|中兴e8820s     (e8820s)
-          "
-          
-          # ==========================================
-          # ⚙️ 3. 核心翻译引擎 (物理纯净版)
-          # ==========================================
-          translate() {
-            local input="$1"
-            local dict="$2"
-            local output=""
-            for word in $input; do
-              local matched=0
-              while IFS= read -r line; do
-                [[ ! "$line" =~ [^[:space:]] ]] && continue
-                local target="(${line##*\(}"
-                local aliases_str="${line%\(*}"
-                IFS='|' read -ra ALIAS_ARRAY <<< "$aliases_str"
-                for raw_alias in "${ALIAS_ARRAY[@]}"; do
-                  local clean_alias=$(trim "$raw_alias")
-                  if [ "$word" == "$clean_alias" ]; then
-                    output="$output $target"
-                    matched=1
-                    break 2
-                  fi
-                done
-              done <<< "$dict"
-              if [ $matched -eq 0 ]; then output="$output $word"; fi
-            done
-            echo $(trim "$output")
-          }
-
-          PARSED_BRAND=$(translate "$RAW_BRAND" "$BRAND_DICT")
-          PARSED_MODEL=$(translate "$RAW_MODEL" "$MODEL_DICT")
-          
-          QUERY_B="${PARSED_BRAND// /.*}"
-          QUERY_M="${PARSED_MODEL// /.*}"
-
-          echo "🔍 引擎启动状态："
-          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [静态爬虫遍历 + 云端多线程盲搜]"
-          [ -n "$QUERY_B" ] && echo "   - 品牌锁定: [$QUERY_B]"
-          [ -n "$QUERY_M" ] && echo "   - 型号锁定: [$QUERY_M]"
-          echo -e "-------------------------------------------------------\n"
-
-          # ==========================================
-          # 🚀 4. 底层提取 (无极 Echo 强刷脚本版，彻底粉碎 YAML 和嵌套报错)
-          # ==========================================
-          ALL_LIST=""
-          
-          if [ -n "$RAW_ARCH" ]; then
-              echo ">>> 检测到已填写架构，切换至 Docker 本地环境提取..."
-              docker pull -q immortalwrt/imagebuilder:${RAW_ARCH}-openwrt-${VERSION} >/dev/null 2>&1 || true
-              ALL_LIST=$(docker run --rm immortalwrt/imagebuilder:${RAW_ARCH}-openwrt-${VERSION} make info 2>/dev/null | grep "^[a-zA-Z0-9_-]*:" | cut -d ':' -f 1 | awk -v arch="$RAW_ARCH" '{print arch " : " $1}')
-              
-              if [ -z "$ALL_LIST" ]; then
-                  echo "❌ 拉取失败：该架构可能拼写错误或不存在。"
-                  exit 1
-              fi
-          else
-              echo ">>> 正在连接底层镜像站，剥离前端外壳抓取全网架构池..."
-              
-              # 第 1 层：用官网源抓取主架构目录（绕过中科大的前端外壳）
-              TARGETS=$(curl -sL --max-time 10 "https://downloads.immortalwrt.org/releases/${VERSION}/targets/" 2>/dev/null | grep -oE '<a href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g')
-              
-              if [ -z "$TARGETS" ]; then
-                  echo "❌ 目录节点连接失败，请重新执行。"
-                  exit 1
-              fi
-              
-              # --- [黑科技核心] 逐行 echo 拼装爬虫 1 号，彻底抛弃嵌套 ---
-              echo '#!/bin/bash' > get_sub.sh
-              echo 't="$1"' >> get_sub.sh
-              echo 'curl -sL --max-time 10 "https://downloads.immortalwrt.org/releases/'"${VERSION}"'/targets/${t}/" 2>/dev/null | grep -oE '\''<a href="[a-zA-Z0-9_-]+/"'\'' | cut -d"\"" -f2 | sed "s/\///g" | sed "s/^/$t-/"' >> get_sub.sh
-              chmod +x get_sub.sh
-              
-              ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 10 ./get_sub.sh "{}")
-              
-              echo ">>> 成功突破迷雾，锁定 $(echo "$ARCH_LIST" | wc -w) 个独立子架构！"
-              echo ">>> 🚦 正在启动【高并发下载通道】提取海量设备特征 (预计 10-15 秒)..."
-              
-              mkdir -p /tmp/profiles
-              
-              # --- [黑科技核心] 逐行 echo 拼装爬虫 2 号 ---
-              echo '#!/bin/bash' > fetch_json.sh
-              echo 'arch="$1"' >> fetch_json.sh
-              echo 'subpath=$(echo "$arch" | tr "-" "/")' >> fetch_json.sh
-              echo 'URL="https://downloads.immortalwrt.org/releases/'"${VERSION}"'/targets/${subpath}/profiles.json"' >> fetch_json.sh
-              echo 'FALLBACK="https://mirrors.ustc.edu.cn/immortalwrt/releases/'"${VERSION}"'/targets/${subpath}/profiles.json"' >> fetch_json.sh
-              echo 'if ! curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$URL" 2>/dev/null; then' >> fetch_json.sh
-              echo '    curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" 2>/dev/null || true' >> fetch_json.sh
-              echo 'fi' >> fetch_json.sh
-              echo 'if [ -s "/tmp/profiles/${arch}_raw.json" ] && jq -e . "/tmp/profiles/${arch}_raw.json" >/dev/null 2>&1; then' >> fetch_json.sh
-              echo '    jq -r ".profiles | keys[]" "/tmp/profiles/${arch}_raw.json" | sed "s/^/$arch : /" > "/tmp/profiles/${arch}.txt"' >> fetch_json.sh
-              echo 'fi' >> fetch_json.sh
-              chmod +x fetch_json.sh
-              
-              # 执行无敌多线程
-              printf "%s\n" "$ARCH_LIST" | xargs -I {} -P 15 ./fetch_json.sh "{}"
-              
-              cat /tmp/profiles/*.txt > /tmp/all_list.txt 2>/dev/null || true
-              ALL_LIST=$(cat /tmp/all_list.txt 2>/dev/null || true)
-              
-              if [ -z "$ALL_LIST" ]; then
-                  echo "❌ 致命错误：数据库抓取归零。"
-                  exit 1
-              fi
-              
-              echo ">>> ✅ 全网数据矩阵重组完毕！总计挖掘到 $(echo "$ALL_LIST" | wc -l) 款专属设备。"
-          fi
-
-          # ==========================================
-          # 🎯 5. 双重交叉过滤
-          # ==========================================
-          RESULT="$ALL_LIST"
-          [ -n "$QUERY_B" ] && RESULT=$(echo "$RESULT" | grep -iE "$QUERY_B" || true)
-          [ -n "$QUERY_M" ] && RESULT=$(echo "$RESULT" | grep -iE "$QUERY_M" || true)
-
-          if [ -z "$RESULT" ]; then
-            echo "❌ 匹配失败：数据库中未找到符合条件的设备。"
-            echo "💡 建议检查拼写，或尝试留空一个搜索框扩大检索范围。"
-          else
-            echo "✅ 匹配成功！为您精准锁定以下组合："
-            echo -e "======================================================="
-            echo "$RESULT" | awk -F ':' '{printf "%-25s : %s\n", $1, $2}' | sort
-            echo -e "======================================================="
-          fi
+          # 赋予后台脚本执行权限并启动
+          chmod +x .github/scripts/query_engine.sh
+          .github/scripts/query_engine.sh
