@@ -1,0 +1,58 @@
+name: 🔍 Query-Device-Profile (查询设备ID)
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: '设备架构 (如: mediatek-filogic, ramips-mt7621)'
+        required: true
+        default: 'mediatek-filogic'
+      keyword:
+        description: '搜索关键词 (如: ax6000, xiaomi。留空则列出该架构下所有设备)'
+        required: false
+        default: ''
+      openwrt_version:
+        description: '选择版本 (建议选 Auto)'
+        required: false
+        default: 'Auto'
+        type: choice
+        options:
+          - 'Auto'
+          - '24.10.5'
+          - '25.12.0-rc1'
+
+jobs:
+  query:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 🔍 解析版本
+        id: vars
+        run: |
+          ARCH="${{ inputs.arch }}"
+          if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
+            LATEST=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=$ARCH-openwrt-" | \
+              jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -E "[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$" | sort -V | tail -n 1 | sed "s/$ARCH-openwrt-//")
+            if [ -z "$LATEST" ] || [ "$LATEST" == "null" ]; then
+              LATEST="24.10.5"
+            fi
+            echo "VERSION=$LATEST" >> $GITHUB_ENV
+          else
+            echo "VERSION=${{ inputs.openwrt_version }}" >> $GITHUB_ENV
+          fi
+
+      - name: 📋 执行查询并过滤输出
+        run: |
+          echo ">>> 正在拉取镜像: immortalwrt/imagebuilder:${{ inputs.arch }}-openwrt-${{ env.VERSION }}"
+          echo -e "\n======================================================="
+          
+          # 直接在 docker 容器内运行 make info，并提取准确的 Profile ID
+          if [ -z "${{ inputs.keyword }}" ]; then
+            echo ">>> 该架构下支持的所有设备 ID 如下："
+            docker run --rm immortalwrt/imagebuilder:${{ inputs.arch }}-openwrt-${{ env.VERSION }} make info | grep "^[a-zA-Z0-9_-]*:" | cut -d ':' -f 1
+          else
+            echo ">>> 正在搜索包含关键词 [${{ inputs.keyword }}] 的设备 ID："
+            docker run --rm immortalwrt/imagebuilder:${{ inputs.arch }}-openwrt-${{ env.VERSION }} make info | grep "^[a-zA-Z0-9_-]*:" | cut -d ':' -f 1 | grep -i "${{ inputs.keyword }}" || echo "❌ 未找到相关设备，请检查架构或更换关键词"
+          fi
+          
+          echo "======================================================="
+          echo "👆 复制上面的精确 ID，填入主构建流程的 device_profile 框中。"
