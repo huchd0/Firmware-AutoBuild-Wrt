@@ -125,7 +125,7 @@ jobs:
           "
           
           # ==========================================
-          # ⚙️ 3. 核心翻译引擎
+          # ⚙️ 3. 核心翻译引擎 (严谨防解析崩溃版)
           # ==========================================
           translate() {
             local input="$1"
@@ -135,8 +135,12 @@ jobs:
               local matched=0
               while IFS= read -r line; do
                 [[ ! "$line" =~ [^[:space:]] ]] && continue
-                local target="(${line##*(}"
-                local aliases_str="${line%(*}"
+                
+                # 【终极修复】：给小括号穿上防弹衣，避免 Bash 解析器发疯
+                local tmp="${line##*"("}"
+                local target="($tmp"
+                local aliases_str="${line%"("*}"
+                
                 IFS='|' read -ra ALIAS_ARRAY <<< "$aliases_str"
                 for raw_alias in "${ALIAS_ARRAY[@]}"; do
                   local clean_alias=$(trim "$raw_alias")
@@ -156,4 +160,27 @@ jobs:
           PARSED_MODEL=$(translate "$RAW_MODEL" "$MODEL_DICT")
           
           QUERY_B="${PARSED_BRAND// /.*}"
-          QUERY_M="${
+          QUERY_M="${PARSED_MODEL// /.*}"
+
+          echo "🔍 引擎启动状态："
+          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [静态网页强搜 + 云端并发盲搜]"
+          [ -n "$QUERY_B" ] && echo "   - 品牌锁定: [$QUERY_B]"
+          [ -n "$QUERY_M" ] && echo "   - 型号锁定: [$QUERY_M]"
+          echo -e "-------------------------------------------------------\n"
+
+          # ==========================================
+          # 🚀 4. 底层提取 (纯静态 HTML 爬虫，免疫流控，消除 awk 嵌套)
+          # ==========================================
+          ALL_LIST=""
+          
+          if [ -n "$RAW_ARCH" ]; then
+              echo ">>> 检测到已填写架构，切换至 Docker 本地环境提取..."
+              docker pull -q immortalwrt/imagebuilder:${RAW_ARCH}-openwrt-${VERSION} >/dev/null 2>&1 || true
+              ALL_LIST=$(docker run --rm immortalwrt/imagebuilder:${RAW_ARCH}-openwrt-${VERSION} make info 2>/dev/null | grep "^[a-zA-Z0-9_-]*:" | cut -d ':' -f 1 | awk -v arch="$RAW_ARCH" '{print arch " : " $1}')
+              
+              if [ -z "$ALL_LIST" ]; then
+                  echo "❌ 拉取失败：该架构可能拼写错误或不存在。"
+                  exit 1
+              fi
+          else
+              echo ">>> 正在使用静态网页爬虫深入镜像站底层，抓取全网架构
