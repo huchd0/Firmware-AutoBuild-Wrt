@@ -158,13 +158,13 @@ jobs:
           QUERY_M="${PARSED_MODEL// /.*}"
 
           echo "🔍 引擎启动状态："
-          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [云端安全防风控队列 - 跨架构盲搜]"
+          [ -n "$RAW_ARCH" ] && echo "   - 扫描模式: [本地极速穿透 - 指定架构 $RAW_ARCH]" || echo "   - 扫描模式: [云端高并发 - 跨架构盲搜]"
           [ -n "$QUERY_B" ] && echo "   - 品牌锁定: [$QUERY_B]"
           [ -n "$QUERY_M" ] && echo "   - 型号锁定: [$QUERY_M]"
           echo -e "-------------------------------------------------------\n"
 
           # ==========================================
-          # 🚀 4. API 架构智能提取 (防 28 号超时报错版)
+          # 🚀 4. API 架构智能提取 (高并发 + 防截断完整版)
           # ==========================================
           ALL_LIST=""
           
@@ -187,37 +187,35 @@ jobs:
               fi
               
               echo ">>> 成功锁定 $(echo "$ARCH_LIST" | wc -w) 个独立架构。"
-              echo ">>> 🚦 正在启动【防风控安全队列】抓取云端设备库..."
+              echo ">>> 🚦 正在启动【高并发安全通道】抓取完整云端设备库 (预计耗时 10-20 秒)..."
               
               mkdir -p /tmp/profiles
+              export VERSION="${VERSION}"
               
-              # 安全队列遍历
-              for arch in $ARCH_LIST; do
-                  subpath=$(echo "$arch" | sed 's/-/\//')
-                  URL="https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets/${subpath}/profiles.json"
+              # 【黑科技核心】：使用 xargs 开 10 个线程并发下载，并且用 -f 和 max-time 30 打造绝对不会被截断的数据源
+              printf "%s\n" $ARCH_LIST | xargs -I {} -P 10 sh -c '
+                  arch="{}"
+                  subpath=$(echo "$arch" | sed "s/-/\//")
+                  URL="https://downloads.immortalwrt.org/releases/${VERSION}/targets/${subpath}/profiles.json"
                   
-                  # 【关键修复】：防超时崩溃装甲 (加上 || echo "000")
-                  HTTP_CODE=$(curl -sL -w "%{http_code}" --connect-timeout 2 --max-time 5 -o /tmp/profiles/${arch}_raw.json "$URL" 2>/dev/null || echo "000")
-                  
-                  # 如果中科大源返回的不是 200 (比如超时变000，或404)
-                  if [ "$HTTP_CODE" != "200" ]; then
-                      FALLBACK="https://downloads.immortalwrt.org/releases/${VERSION}/targets/${subpath}/profiles.json"
-                      # 备用节点也要穿防弹衣
-                      curl -sL --connect-timeout 2 --max-time 5 -o /tmp/profiles/${arch}_raw.json "$FALLBACK" 2>/dev/null || true
+                  # 加上 -f 确保网页报错不会被误当成正常文件。加大超时至 30 秒保全 ramips 这种超级大户
+                  if ! curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$URL"; then
+                      FALLBACK="https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets/${subpath}/profiles.json"
+                      curl -sL -f --connect-timeout 5 --max-time 30 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" || true
                   fi
                   
-                  # 只有当文件存在且不为空时才解析
-                  if [ -s /tmp/profiles/${arch}_raw.json ]; then
-                      jq -r '.profiles | keys[]' /tmp/profiles/${arch}_raw.json 2>/dev/null | awk -v a="$arch" '{print a " : " $1}' > /tmp/profiles/${arch}.txt || true
+                  # 只有用 jq -e 验证没有被截断的纯正 JSON，才允许写入数据池
+                  if [ -s "/tmp/profiles/${arch}_raw.json" ] && jq -e . "/tmp/profiles/${arch}_raw.json" >/dev/null 2>&1; then
+                      jq -r ".profiles | keys[]" "/tmp/profiles/${arch}_raw.json" | awk -v a="$arch" "{print a \" : \" \$1}" > "/tmp/profiles/${arch}.txt"
                   fi
-              done
+              '
               
               cat /tmp/profiles/*.txt > /tmp/all_list.txt 2>/dev/null || true
               ALL_LIST=$(cat /tmp/all_list.txt 2>/dev/null || true)
               
               if [ -z "$ALL_LIST" ]; then
                   echo "❌ 致命错误：数据池抓取失败，可能官网服务器正在维护。"
-                  echo "💡 终极对策：请在上方手动填写『设备架构』(如 ramips-mt7621)，引擎将自动切换为本地 100% 可靠查库模式！"
+                  echo "💡 终极对策：请在上方手动填写『设备架构』(如 ramips-mt7621)，引擎将自动切换为本地查库模式！"
                   exit 1
               fi
               
