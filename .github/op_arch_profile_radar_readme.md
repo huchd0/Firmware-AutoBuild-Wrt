@@ -1,6 +1,6 @@
 # 🔍 OP Arch & Profile Radar (设备号智能寻址雷达)
 
-> **💡 提示**：在 OpenWrt/ImmortalWrt 编译时，**架构 (Arch)** 选错会导致固件无法运行（变砖）或无法刷入。请务必先核对芯片型号对应的架构。（比如：OpenWrt/ImmortalWrt 社区的一个“命名历史遗留问题，匹配品牌xiaomi时会出现redmi，由于红米 AX6000 的全名是 xiaomi_redmi-router-ax6000，它完美包含了 xiaomi，所以被引擎“由于太匹配”而抓取了出来）
+> **💡 提示**：在 OpenWrt/ImmortalWrt 编译时，**架构 (Arch)** 选错会导致固件无法运行（变砖）或无法刷入。请务必先核对芯片型号对应的架构。
 
 ## 📖 项目简介
 在编译 OpenWrt/ImmortalWrt 时，寻找晦涩的“架构(Arch)”和“设备代号(Profile)”是最大的痛点。本工具是一套部署在 GitHub Actions 上的 **自动化寻址雷达**。你只需输入中文绰号，它就能穿透全网数据库，精准锁定底层代码！
