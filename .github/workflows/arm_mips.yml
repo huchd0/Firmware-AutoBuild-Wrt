@@ -4,15 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       arch:
-        description: '设备架构 (如: ramips-mt7621, rockchip-armv8, bcm27xx-bcm2711)'
+        description: '设备架构 (如: ramips-mt7621, mediatek-filogic)'
         required: true
         default: 'mediatek-filogic'
+      brand:
+        description: '品牌过滤 [防刷砖双保险] (如: xiaomi, asus, tplink, 留空则不校验)'
+        required: false
+        default: 'xiaomi'
+        type: string
       device_profile:
-        description: '设备 Profile (如: generic, xiaomi_mi-router-4g, tplink_tl-wdr7660)'
+        description: '型号关键词 (如: ax6000, k2p, r4s)'
         required: true
-        default: 'xiaomi_redmi-router-ax6000'
+        default: 'ax6000'
       openwrt_version:
-        description: '选择版本 (Auto 为最新)'
+        description: '选择版本 (Auto 将安全抓取最新版)'
         required: false
         default: 'Auto'
         type: choice
@@ -21,23 +26,36 @@ on:
           - '24.10.5'
           - '25.12.0-rc1'
       custom_router_ip:
-        description: '管理地址'
+        description: '固件默认管理 IP'
         required: true
         default: '192.168.10.1'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 🔍 解析版本
+      - name: 🔍 解析版本 (高容错增强版)
         id: vars
         run: |
           ARCH="${{ inputs.arch }}"
           if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
-            LATEST=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=$ARCH-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^$ARCH-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed "s/$ARCH-openwrt-//")
+            echo ">>> 正在从 Docker Hub 抓取 $ARCH 的最新 Tag..."
+            # 增强逻辑：使用严格正则提取带三段式数字的版本号(含RC)，并按照版本号排序取最高版，杜绝获取到 null
+            LATEST=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=$ARCH-openwrt-" | \
+              jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -E "[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$" | sort -V | tail -n 1 | sed "s/$ARCH-openwrt-//")
+            
+            # 极限兜底保护
+            if [ -z "$LATEST" ] || [ "$LATEST" == "null" ]; then
+              echo "⚠️ 警告：获取最新版本失败或格式异常，自动回退到默认稳定版 24.10.5"
+              LATEST="24.10.5"
+            fi
+            echo "✅ 最终锁定构建版本: $LATEST"
             echo "VERSION=$LATEST" >> $GITHUB_ENV
           else
             echo "VERSION=${{ inputs.openwrt_version }}" >> $GITHUB_ENV
@@ -55,13 +73,14 @@ jobs:
             -v "${{ github.workspace }}/build_embedded.sh:/home/build/immortalwrt/build.sh" \
             -e MANAGEMENT_IP="${{ inputs.custom_router_ip }}" \
             -e TARGET_ARCH="${{ inputs.arch }}" \
+            -e BRAND="${{ inputs.brand }}" \
             -e DEVICE_PROFILE="${{ inputs.device_profile }}" \
             immortalwrt/imagebuilder:${{ inputs.arch }}-openwrt-${{ env.VERSION }} \
             /bin/bash /home/build/immortalwrt/build.sh
 
       - name: Upload
         uses: softprops/action-gh-release@v2.4.1
-        if: success() # 只有前面的步骤全部成功才运行
+        if: success() # 强干预：只有构建 100% 成功才会发布 Release
         with:
           tag_name: "${{ inputs.device_profile }}-${{ env.VERSION }}-${{ github.run_id }}"
           files: |
