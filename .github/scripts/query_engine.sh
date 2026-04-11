@@ -209,11 +209,11 @@ if [ -z "$RESULT" ]; then
 else
   echo "✅ 匹配成功！为您精准锁定以下组合："
   echo -e "======================================================="
-  FORMATTED_RESULT=$(echo "$RESULT" | awk -F ':' '{printf "%-18s : %s\n", $1, $2}' | sort)
+  echo "$RESULT" | awk -F ' : ' '{printf "%-18s:%s\n", $1, $2}' | sort
   echo "$FORMATTED_RESULT"
   echo -e "======================================================="
   
-  # 【核心黑科技：输出到 GitHub 首页摘要】
+  # 【输出到 GitHub 首页摘要】
   echo "### ✅ 匹配成功！精准锁定以下组合：" >> $GITHUB_STEP_SUMMARY
   echo '```text' >> $GITHUB_STEP_SUMMARY
   echo "$FORMATTED_RESULT" >> $GITHUB_STEP_SUMMARY
