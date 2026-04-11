@@ -6,11 +6,11 @@ on:
       arch:
         description: '设备架构 (如: ramips-mt7621, rockchip-armv8, bcm27xx-bcm2711)'
         required: true
-        default: 'ramips-mt7621'
+        default: 'mediatek-filogic'
       device_profile:
         description: '设备 Profile (如: generic, xiaomi_mi-router-4g, tplink_tl-wdr7660)'
         required: true
-        default: 'generic'
+        default: 'xiaomi_redmi-router-ax6000'
       openwrt_version:
         description: '选择版本 (Auto 为最新)'
         required: false
