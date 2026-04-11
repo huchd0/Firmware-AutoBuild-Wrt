@@ -60,6 +60,25 @@ luci-theme-argon \
 luci-app-argon-config \
 bash jq curl htop coreutils-nohup"
 
-# 6. 执行构建
-echo ">>> 🛠️ 开始构建固件: $DEVICE_PROFILE ..."
+# 6. 执行构建 (带自动纠错逻辑)
+echo ">>> 🛠️ 检查并构建固件: $DEVICE_PROFILE ..."
+
+# 自动纠错：如果填写的 Profile 不存在，尝试搜索包含关键字的 Profile
+if ! make info | grep -q "^${DEVICE_PROFILE}:"; then
+    echo "⚠️ 警告: 未找到精确匹配的 Profile '$DEVICE_PROFILE'，正在尝试智能匹配..."
+    
+    # 提取型号关键词，比如 ax6000
+    KEYWORD=$(echo "$DEVICE_PROFILE" | grep -oE "ax[0-9]+")
+    SUGGESTION=$(make info | grep -i "$KEYWORD" | head -n 1 | cut -d ':' -f 1)
+    
+    if [ -n "$SUGGESTION" ]; then
+        echo "✅ 发现匹配项: $SUGGESTION，自动替换并继续构建。"
+        DEVICE_PROFILE="$SUGGESTION"
+    else
+        echo "❌ 无法匹配设备，请检查 arch 是否正确。可用 Profile 列表如下："
+        make info | grep ":" | head -n 20
+        exit 1
+    fi
+fi
+
 make image PROFILE="$DEVICE_PROFILE" PACKAGES="$PKGS" FILES="files"
