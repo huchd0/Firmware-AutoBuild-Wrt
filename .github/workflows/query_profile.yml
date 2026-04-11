@@ -4,33 +4,50 @@ on:
   workflow_dispatch:
     inputs:
       arch:
-        description: '1. 设备架构 (非必填。填入即启动本地极速强搜，留空则全网盲搜)'
+        description: '1. 设备架构 (留空则全网盲搜)'
         required: false
         default: ''
       brand:
-        description: '2. 品牌 (非必填。支持中文别名)'
+        description: '2. 品牌 (支持中文别名)'
         required: false
         default: ''
       model:
-        description: '3. 型号/绰号 (非必填。支持中文别名)'
+        description: '3. 型号/绰号 (支持中文别名)'
         required: false
         default: ''
       openwrt_version:
-        description: '4. 目标版本 (填 Auto 抓最新。查老机型请手填，如 23.05.4)'
+        description: '4. 快捷选择主线版本'
         required: false
         default: 'Auto'
+        type: choice
+        options:
+          - 'Auto'
+          - '24.10.5'
+          - '25.12.0-rc1'
+      custom_version:
+        description: '5. 寻找被抛弃的老将？请手填旧版本号 (如: 23.05.4。只要填写，无视上方选项)'
+        required: false
+        default: ''
 
 jobs:
   query:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🔍 解析核心版本
+      - name: 🔍 解析核心版本 (引入历史穿越逻辑)
         id: vars
         run: |
-          if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
+          # 优先级 1：如果用户手动输入了老版本，直接强行接管！
+          if [ -n "${{ inputs.custom_version }}" ]; then
+            echo ">>> 启动时光机！强行跳转至历史版本: ${{ inputs.custom_version }}"
+            echo "VERSION=${{ inputs.custom_version }}" >> $GITHUB_ENV
+            
+          # 优先级 2：自动追踪最新版
+          elif [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
             LATEST=$(curl -sL --max-time 5 "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100" | jq -r '.results[].name' 2>/dev/null | grep -v "SNAPSHOT" | grep -E "openwrt-[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$" | sed -E 's/.*openwrt-//' | sort -V | tail -n 1 || echo "24.10.5")
             [ -z "$LATEST" ] || [ "$LATEST" == "null" ] && LATEST="24.10.5"
             echo "VERSION=$LATEST" >> $GITHUB_ENV
+            
+          # 优先级 3：使用下拉菜单选中的版本
           else
             echo "VERSION=${{ inputs.openwrt_version }}" >> $GITHUB_ENV
           fi
