@@ -31,7 +31,7 @@ on:
       custom_router_ip:
         description: '6. 固件默认管理 IP'
         required: true
-        default: '192.168.10.1'
+        default: '192.168.100.1'
 
 jobs:
   build:
