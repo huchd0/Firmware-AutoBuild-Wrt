@@ -78,7 +78,8 @@ mkdir -p files/root files/etc/uci-defaults files/etc/openclash/core
 # 📥 4. 插件与内核获取
 # ==========================================
 echo ">>> 📥 获取 OpenClash APK..."
-OC_URL=$(curl -sL https://api.github.com/repos/vernesong/OpenClash/releases/latest | jq -r '.assets[] | select(.name | endswith(".apk")) | .browser_download_url' | head -n 1)
+# 使用原生 grep 和 cut，彻底免疫环境依赖问题
+OC_URL=$(curl -sL https://api.github.com/repos/vernesong/OpenClash/releases/latest | grep "browser_download_url" | grep "\.apk" | head -n 1 | cut -d '"' -f 4)
 
 if [[ "$OC_URL" != http* ]]; then
     echo "❌ 致命错误: GitHub API 限流。为防刷砖，构建中止。"
