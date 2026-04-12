@@ -130,7 +130,7 @@ else
 fi
 uci commit network
 
-# --- C. 智能大分区强制挂载保护 (已剔除 parted) ---
+# --- C. 智能大分区强制挂载保护 ---
 if ! lsblk | grep -q sda3; then
     echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
     echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
@@ -345,14 +345,11 @@ PKG_HW_TOOLS=(
 
 PKG_LUCI_APPS=(
     "luci-app-openclash"
+    "luci-app-homeproxy"
+    "luci-i18n-homeproxy-zh-cn"
     "luci-theme-argon"
-    "luci-app-argon-config"
-    "luci-i18n-argon-config-zh-cn"
     "luci-app-ksmbd"
     "luci-i18n-ksmbd-zh-cn"
-    "nlbwmon"
-    "luci-app-nlbwmon"
-    "luci-i18n-nlbwmon-zh-cn"
     "luci-app-statistics"
     "luci-i18n-statistics-zh-cn"
     "luci-app-autoreboot"
