@@ -54,38 +54,45 @@ cat << 'EOF_WIFI' > files/etc/init.d/wifi-auto-patch
 START=99
 
 start() {
-    WAIT=0
-    while [ $WAIT -lt 30 ]; do
-        wifi config
-        if uci get wireless.radio0 >/dev/null 2>&1; then
-            break
-        fi
-        sleep 2
-        WAIT=$((WAIT+1))
-    done
-
-    if uci get wireless.radio0 >/dev/null 2>&1; then
-        uci set wireless.radio0.band='5g'
-        uci set wireless.radio0.channel='149'
-        uci set wireless.radio0.htmode='EHT80'
-        uci set wireless.radio0.country='AU'
-        uci set wireless.radio0.cell_density='0'
-        uci set wireless.radio0.txpower='23'
-        
-        for iface in $(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
-            uci set wireless.${iface}.ssid='mywifi7'
-            uci set wireless.${iface}.encryption='sae-mixed'
-            uci set wireless.${iface}.key='Aa666666'
-            uci set wireless.${iface}.ieee80211w='1'
-            uci set wireless.${iface}.network='lan'
-            uci set wireless.${iface}.mode='ap'
+    # 将探测和修改逻辑放进后台 ( ) & 执行，绝对不阻塞路由器开机速度
+    (
+        WAIT=0
+        while [ $WAIT -lt 30 ]; do
+            wifi config
+            if uci get wireless.radio0 >/dev/null 2>&1; then
+                break
+            fi
+            sleep 2
+            WAIT=$((WAIT+1))
         done
+
+        if uci get wireless.radio0 >/dev/null 2>&1; then
+            uci set wireless.radio0.band='5g'
+            uci set wireless.radio0.channel='149'
+            uci set wireless.radio0.htmode='EHT80'
+            uci set wireless.radio0.country='AU'
+            uci set wireless.radio0.cell_density='0'
+            uci set wireless.radio0.txpower='23'
+            
+            for iface in $(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
+                uci set wireless.${iface}.ssid='mywifi7'
+                uci set wireless.${iface}.encryption='sae-mixed'
+                uci set wireless.${iface}.key='Aa666666'
+                uci set wireless.${iface}.ieee80211w='1'
+                uci set wireless.${iface}.network='lan'
+                uci set wireless.${iface}.mode='ap'
+            done
+            
+            uci commit wireless
+            
+            # 【核心修复】强制重启无线服务，让 mywifi7 立刻生效！
+            sleep 2
+            wifi reload
+        fi
         
-        uci commit wireless
-    fi
-    
-    sleep 1
-    rm -f /etc/init.d/wifi-auto-patch
+        # 任务完成，自我销毁
+        rm -f /etc/init.d/wifi-auto-patch
+    ) &
 }
 EOF_WIFI
 chmod +x files/etc/init.d/wifi-auto-patch
