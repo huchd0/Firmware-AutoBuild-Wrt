@@ -1,6 +1,6 @@
 编译时用的是openwrt官方源（极速构建），运行阶段被替换成了科大源（长期维护）
 
-不仅适用于 X86 机器，ImmortalWrt-Embedded-Custom (非x86设备定制固件) 可以给非 x86 架构的路由器（比如红米、华硕、中兴、NanoPi...的硬路由）编译固件！
+#### 不仅适用于 X86 机器，**  🚀 ImmortalWrt-Embedded-Custom (非x86设备定制固件)  ** 可以给非 x86 架构的路由器（比如红米、华硕、中兴、NanoPi...的硬路由）编译固件！
 
 嵌入式路由器中芯片决定属于哪个架构(arch)，如红米 AX6000 (Redmi AX6000)就是：mediatek-filogic，每一个具体的硬件型号都有自己专属的 Profile 名称，查询方式请用查询工具：OP Arch & Profile Radar (设备号智能寻址雷达)
 
