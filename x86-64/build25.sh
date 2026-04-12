@@ -29,7 +29,7 @@ mkdir -p files/etc/init.d
 
 echo ">>> 3. 下载必要核心与驱动固件 <<<"
 
-# 提前下载并注入 OpenClash Meta 兼容版内核 (插件本身已由 ImmortalWrt 源提供)
+# 提前下载并注入 OpenClash Meta 兼容版内核
 echo "正在下载 OpenClash Meta 兼容版内核..."
 mkdir -p files/etc/openclash/core
 wget -qO files/etc/openclash/core/meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-compatible.tar.gz"
@@ -38,7 +38,7 @@ mv files/etc/openclash/core/clash files/etc/openclash/core/clash_meta
 chmod +x files/etc/openclash/core/clash_meta
 rm -f files/etc/openclash/core/meta.tar.gz
 
-# --- 注入 MT7925 官方蓝牙与无线固件 (GitLab 锁定版本) ---
+# --- 注入 MT7925 官方蓝牙与无线固件 ---
 echo "正在注入 MT7925 官方底层固件..."
 mkdir -p files/lib/firmware/mediatek/mt7925
 
@@ -54,7 +54,7 @@ wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin \
 echo ">>> 4. 编写全自动开机初始化脚本 <<<"
 
 # ===================================================================
-# --- 🎯 核心黑科技：后台自动抓取真实 PCI 路径，注入专属 Wi-Fi 参数 ---
+# --- 🎯 后台自动抓取真实 PCI 路径，注入专属 Wi-Fi 参数 ---
 # ===================================================================
 cat << 'EOF_WIFI' > files/etc/init.d/wifi-auto-patch
 #!/bin/sh /etc/rc.common
@@ -103,7 +103,7 @@ chmod +x files/etc/init.d/wifi-auto-patch
 cat << EOF > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
 
-# 注册我们的 Wi-Fi 智能补全服务
+# 注册 Wi-Fi 智能补全服务
 /etc/init.d/wifi-auto-patch enable
 
 # --- A1. 核心网络设置 ---
@@ -112,7 +112,7 @@ uci delete network.@device[0].ports 2>/dev/null
 uci set network.lan.device='br-lan'
 uci delete network.lan.type 2>/dev/null
 
-# --- A2. 强行设置时区为中国 (Asia/Shanghai) ---
+# --- A2. 强行设置时区与主机名 ---
 uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
 uci set system.@system[0].hostname='Tanxm'
@@ -173,7 +173,7 @@ if [ -n "\$TARGET_UUID" ]; then
     mount /dev/sda3 /mnt/sda3 2>/dev/null || true
 fi
 
-# --- D. 终极性能监控图表修复 (MQTT 幽灵配置) ---
+# --- D. 性能监控图表修复 (MQTT 幽灵配置) ---
 if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     
     [ ! -f "/etc/config/luci_statistics" ] && touch /etc/config/luci_statistics
@@ -228,7 +228,7 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     touch /etc/collectd_inited
 fi
 
-# ImmortalWrt 的专属美化：如果检测到 Argon，自动将其设为默认主题
+# 专属美化：强制应用 Argon 主题
 if uci get luci.themes.Argon >/dev/null 2>&1; then
     uci set luci.main.mediaurlbase='/luci-static/argon'
     uci commit luci
@@ -239,30 +239,40 @@ exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-custom-setup
 
-echo ">>> 5. 配置 ImmortalWrt 专属软件列表 <<<"
 
-# 基础组件与中文包
-PKG_CORE="-dnsmasq -dnsmasq-default dnsmasq-full luci luci-base luci-compat luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn"
+echo ">>> 5. 配置 ImmortalWrt 专属软件列表 (满血叠加版) <<<"
 
-# 磁盘与文件系统支持
+# 1. 基础组件与中文包 (修复补回: 软件包管理界面汉化)
+PKG_CORE="-dnsmasq -dnsmasq-default dnsmasq-full luci luci-base luci-compat luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn"
+
+# 2. 磁盘与文件系统支持
 PKG_DISK="block-mount blkid lsblk parted fdisk e2fsprogs kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat kmod-fs-exfat"
 
-# 依赖环境
+# 3. 依赖环境
 PKG_DEPENDS="coreutils-nohup bash jq curl ca-bundle libcap libcap-bin ruby ruby-yaml unzip"
 
-# 网络与底层驱动
-PKG_NETWORK="ip-full iptables-mod-tproxy iptables-mod-extra kmod-tun kmod-inet-diag kmod-nft-tproxy kmod-igc kmod-igb kmod-r8169 iwinfo"
+# 4. 网络与底层驱动 (新增 kmod-tcp-bbr 榨干带宽)
+PKG_NETWORK="ip-full iptables-mod-tproxy iptables-mod-extra kmod-tun kmod-inet-diag kmod-nft-tproxy kmod-igc kmod-igb kmod-r8169 iwinfo kmod-tcp-bbr"
 
-# Wi-Fi 7 (MT7925) 与蓝牙支持
+# 5. Wi-Fi 7 (MT7925) 与蓝牙支持 (防冲突：全量排除基础版 wpad)
 PKG_WIFI_BT="-wpad -wpad-basic -wpad-basic-mbedtls -wpad-basic-wolfssl -wpad-mbedtls -wpad-wolfssl wpad-openssl kmod-mt7925e kmod-mt7925-firmware kmod-btusb bluez-daemon kmod-input-uinput"
 
-# 系统监控 (剔除了 mqtt，结合上面的幽灵配置使用)
+# 6. 系统监控 (剔除 mqtt 避免报错)
 PKG_MONITOR="nano htop ethtool tcpdump mtr conntrack iftop screen collectd-mod-thermal collectd-mod-sensors collectd-mod-cpu collectd-mod-ping collectd-mod-interface collectd-mod-rrdtool collectd-mod-iwinfo"
 
-# 核心插件：直接利用 ImmortalWrt 官方源拉取 OpenClash 和 Argon 主题
-PKG_LUCI_APPS="luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-ksmbd luci-i18n-ksmbd-zh-cn luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn luci-app-statistics luci-i18n-statistics-zh-cn"
+# 7. x86 硬件级调试工具与微码 (工控机底层稳定必备)
+PKG_HW_TOOLS="pciutils usbutils iperf3 intel-microcode amd-microcode"
 
-PACKAGES="$PKG_CORE $PKG_DISK $PKG_DEPENDS $PKG_NETWORK $PKG_WIFI_BT $PKG_MONITOR $PKG_LUCI_APPS"
+# 8. 核心应用与面板 (修复补回: nlbwmon核心、新增: upnp、autoreboot定时重启)
+PKG_LUCI_APPS="luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
+luci-app-ttyd luci-i18n-ttyd-zh-cn \
+luci-app-ksmbd luci-i18n-ksmbd-zh-cn \
+nlbwmon luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn \
+luci-app-statistics luci-i18n-statistics-zh-cn \
+luci-app-upnp luci-i18n-upnp-zh-cn \
+luci-app-autoreboot luci-i18n-autoreboot-zh-cn"
+
+PACKAGES="$PKG_CORE $PKG_DISK $PKG_DEPENDS $PKG_NETWORK $PKG_WIFI_BT $PKG_MONITOR $PKG_HW_TOOLS $PKG_LUCI_APPS"
 
 echo ">>> 开始 Make Image 打包 <<<"
 # 强制加入 KERNEL_PARTSIZE=64 确保双重互刷安全
