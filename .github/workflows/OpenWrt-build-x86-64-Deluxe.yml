@@ -1,4 +1,4 @@
-name: OpenWrt-build-x86-64
+name: OpenWrt-build-x86-64-Deluxe
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
