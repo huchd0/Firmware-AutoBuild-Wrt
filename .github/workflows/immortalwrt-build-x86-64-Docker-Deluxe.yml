@@ -51,18 +51,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
 
-      - name: Prepare Download Cache Directory
-        run: mkdir -p ${{ github.workspace }}/dl_cache
-
-      - name: Cache Download Pool (dl_cache)
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/dl_cache
-          key: dl-cache-${{ hashFiles('x86-64/immortalwrt-build-x86-64-Deluxe-build.sh') }}-${{ github.run_id }}
-          restore-keys: |
-            dl-cache-${{ hashFiles('x86-64/immortalwrt-build-x86-64-Deluxe-build.sh') }}-
-            dl-cache-
-
       - name: Set executable permissions
         run: |
           sed -i 's/\r$//' ${{ github.workspace }}/x86-64/immortalwrt-build-x86-64-Deluxe-build.sh
@@ -77,7 +65,8 @@ jobs:
         run: |
           if [ "$INPUT_VERSION" == "Auto" ]; then
             echo ">>> 正在自动抓取 Docker Hub 上最新的 ImmortalWrt 镜像标签..."
-            LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
+            # 使用 RC 版本抓取规则，排除 SNAPSHOT，允许 rc 后缀
+            LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | head -n 1 | sed 's/x86-64-openwrt-//')
             
             if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
               echo "❌ 致命错误：未能从 Docker Hub 获取到有效的版本号！工作流中止。"
@@ -111,16 +100,12 @@ jobs:
         run: |
           echo "🚀 开始基于 ${{ env.FINAL_VERSION }} 构建，RootFS 大小: ${INPUT_ROOTFS}MB"
           
-          # 【终极修复】将宿主机目录精准映射到 ImageBuilder 的原生工作目录 /builder
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/builder/bin" \
             -v "${{ github.workspace }}/files:/builder/files" \
             -v "${{ github.workspace }}/shell:/builder/shell" \
-            -v "${{ github.workspace }}/dl_cache:/builder/dl_cache" \
             -v "${{ github.workspace }}/x86-64/immortalwrt-build-x86-64-Deluxe-build.sh:/builder/build.sh" \
-            -e DL_CACHE_DIR="/builder/dl_cache" \
-            -e GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
             -e ROOTFS_SIZE="$INPUT_ROOTFS" \
             -e INCLUDE_DOCKER="$INPUT_DOCKER" \
             -e PPPOE_ACCOUNT="$INPUT_PPPOE_ACC" \
@@ -151,7 +136,7 @@ jobs:
           cat > ${{ github.workspace }}/router-info.md <<EOF
           ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }}-Deluxe高级定制固件
           
-          > 本固件由 GitHub Actions 驱动 \`ImageBuilder\` 全自动构建，专为 x86-64 物理机与虚拟机优化。
+          > 本固件由 GitHub Actions 驱动 \`ImageBuilder\` 全自动构建，专为 J4125 物理机与虚拟机优化。
           
           ## 📡 路由器后台与网络
           - 🏠 **管理地址**: \`$INPUT_IP\`
@@ -178,7 +163,7 @@ jobs:
           tag_name: Build-${{ env.DATE }}
           name: ImmortalWrt ${{ env.FINAL_VERSION }}-Deluxe (${{ env.INPUT_IP }})
           body_path: ${{ github.workspace }}/router-info.md
-          文件: |
+          files: |
             ${{ github.workspace }}/bin/targets/x86/64/*combined-efi*.img.gz
             ${{ github.workspace }}/bin/targets/x86/64/*sha256sums
           token: ${{ secrets.GITHUB_TOKEN }}
