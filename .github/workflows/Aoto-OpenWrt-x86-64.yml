@@ -1,4 +1,4 @@
-name:Aoto OpenWrt x86_64 智能自动编译发布
+name: Aoto-OpenWrt-x86_64-智能自动编译发布
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
