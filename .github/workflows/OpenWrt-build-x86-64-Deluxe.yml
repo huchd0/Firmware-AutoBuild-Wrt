@@ -68,7 +68,7 @@ jobs:
           # 核心修复：强制清除网页复制粘贴带来的 Windows 回车符，防止脚本报错
           sed -i 's/\r$//' OpenWrt-build-x86-64-Deluxe-build.sh
           chmod +x OpenWrt-build-x86-64-Deluxe-build.sh
-          cp OpenWrt-build-x86-64-Deluxe.sh imagebuilder/
+          cp OpenWrt-build-x86-64-Deluxe-build.sh imagebuilder/
           cd imagebuilder
           
           # 执行你强大的 OpenWrt-build-x86-64-Deluxe-build.sh
