@@ -245,20 +245,23 @@ fi
 
 PACKAGES=$(echo "$RAW_PACKAGES" | sed 's/#.*//g' | tr -s ' \n' ' ')
 
-echo ">>> 6.5 [构建加速] 仅针对 GitHub 编译机优化网络隧道 <<<"
+echo ">>> 6.5 [终极网络提速] 劫持编译机临时源 (保证软路由开机仍为纯净官方源) <<<"
 
-# 1. 强制 IPv4 优先，跳过 GitHub Actions 常见的 IPv6 寻址卡死（保留这个最稳的优化）
+# 1. 强制 IPv4 优先，跳过 GitHub Actions 常见的 IPv6 寻址卡死
 echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf 2>/dev/null || true
 
-# 2. 移除上一版的 hosts 硬绑定（防止死 IP 导致彻底断网卡死）
+# 2. 清除之前可能卡死网络的僵尸 hosts 记录
 sed -i '/downloads.immortalwrt.org/d' /etc/hosts 2>/dev/null || true
 sed -i '/sysupgrade.immortalwrt.org/d' /etc/hosts 2>/dev/null || true
 
-# 3. 降级为 HTTP 协议，完美避开 Cloudflare 对 GitHub 机器的 TLS (HTTPS) 握手特征拦截！
-# 注意：这只影响当前编译机的临时下载，生成的固件开机后依旧是官方原本的配置。
+# 3. 【核心魔法】把 GitHub 机器的临时拉包源换成中科大，满速爆发！
 if [ -f "repositories.conf" ]; then
+    # ⚠️ 郑重承诺：这绝对不会影响你最终生成的软路由固件，固件开机后必定是官方源！
+    sed -i 's/downloads.immortalwrt.org/mirrors.ustc.edu.cn\/immortalwrt/g' repositories.conf
+    
+    # 强制转为 HTTP 协议，免去 400 多次 TLS 证书加密握手，进一步榨干 IO 性能
     sed -i 's/https:\/\//http:\/\//g' repositories.conf
-    echo "✅ 已开启纯净 HTTP 裸奔拉取模式，避开 TLS 拦截盾，准备全速爆发！"
+    echo "✅ 编译机专用满速通道已建立，绕过限速盾，准备起飞！"
 fi
 
 echo ">>> 7. [多核极速] 开始 Make Image 打包 <<<"
