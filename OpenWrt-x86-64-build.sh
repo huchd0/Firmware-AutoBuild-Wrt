@@ -145,11 +145,9 @@ coreutils-nohup bash curl ca-bundle ip-full iptables-mod-tproxy iptables-mod-ext
 libcap libcap-bin ruby ruby-yaml kmod-tun kmod-inet-diag unzip kmod-nft-tproxy kmod-igc iwinfo"
 
 echo ">>> 6. 开始 Make Image 打包 <<<"
-# 把 EXTRA_IMAGE_NAME="efi" 改成了 "efi-Auto"
-make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME="efi-Auto"
+make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files"
 
 echo ">>> 7. 提取固件 <<<"
 mkdir -p output-firmware
-# 拷贝固件时的匹配名字也加上 -Auto
-cp bin/targets/x86/64/*combined-efi-Auto.img.gz output-firmware/ 2>/dev/null || true
+cp bin/targets/x86/64/*combined-efi.img.gz output-firmware/ 2>/dev/null || true
 echo ">>> 全部构建任务已圆满完成！ <<<"
