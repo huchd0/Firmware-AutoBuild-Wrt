@@ -135,7 +135,7 @@ jobs:
           fi
 
           cat > ${{ github.workspace }}/router-info.md <<EOF
-          ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} 高级定制固件
+          ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} Deluxe高级定制固件
           
           > 本固件由 GitHub Actions 驱动 \`ImageBuilder\` 全自动构建，专为 x86-64 物理机与虚拟机优化。
           
