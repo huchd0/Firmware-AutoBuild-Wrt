@@ -39,7 +39,7 @@ jobs:
         run: |
           if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
             echo ">>> 正在自动抓取 Docker Hub 上最新的 ImmortalWrt 标签..."
-            # 这里的逻辑保持你之前的：剔除 SNAPSHOT 和 纯数字开发版，允许 rc 版
+            # 剔除 SNAPSHOT 和 纯数字开发版，允许 rc 版
             LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
             
             if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
@@ -74,21 +74,21 @@ jobs:
       - name: Create Info Doc
         run: |
           cat > ${{ github.workspace }}/router-info.md <<EOF
-          ## 🌟 ImmortalWrt ${{ env.FINAL_VERSION }} 定制版
+          ## 🌟 ImmortalWrt ${{ env.FINAL_VERSION }} 纯离线防崩定制版
           
           - 🏠 **管理地址**: http://${{ inputs.custom_router_ip }}
           - 👤 **用户名**: root
           - 🔑 **密码**: (空)
           - 📦 **分区配置**: Kernel: 64MB | RootFS: ${{ inputs.profile }}MB
           - ⚙️ **核心集成**: OpenClash (Meta核心), Argon 主题
-          - 💾 **特性**: 自动挂载 sda3 (不格式化已有数据), 官方源优化, 开启 BBR
+          - 🛡️ **底层优化**: 纯离线防崩注入, 单/多网口智能分配 (eth0为WAN)
+          - 💾 **磁盘特性**: 首次开机自动扩展并挂载 sda3 (不破坏已有数据)
           EOF
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2.4.1
         with:
           tag_name: "${{ env.FINAL_VERSION }}-Build-${{ github.run_id }}"
-          # 标题优化，让你一眼看出这个包的 IP 和 大小
           name: "ImmortalWrt ${{ env.FINAL_VERSION }} [IP: ${{ inputs.custom_router_ip }} | ${{ inputs.profile }}MB]"
           body_path: "${{ github.workspace }}/router-info.md"
           files: |
