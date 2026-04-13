@@ -245,12 +245,25 @@ fi
 
 PACKAGES=$(echo "$RAW_PACKAGES" | sed 's/#.*//g' | tr -s ' \n' ' ')
 
-echo ">>> 6.5 [构建加速] 仅针对 GitHub 编译机优化 DNS 与寻址 <<<"
-# 强制 IPv4 优先，跳过 GitHub Actions 常见的 IPv6 寻址超时
+echo ">>> 6.5 [构建加速] 突破官方 CDN 限速黑洞 <<<"
+# 1. 强制 IPv4 优先，防止 Actions IPv6 寻址卡死
 echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf 2>/dev/null || true
-# 静态解析官方源 IP，跳过 DNS 查询耗时 (仅对编译环境生效，固件依旧是官方域名)
-echo "104.21.75.148 downloads.immortalwrt.org" >> /etc/hosts
-echo "172.67.142.152 sysupgrade.immortalwrt.org" >> /etc/hosts
+
+# 2. 清除上次可能遗留的 hosts 绑定，恢复正常的 DNS 解析
+sed -i '/downloads.immortalwrt.org/d' /etc/hosts 2>/dev/null || true
+sed -i '/sysupgrade.immortalwrt.org/d' /etc/hosts 2>/dev/null || true
+
+# 3. 核心提速：安全替换【编译机】的临时下载源
+if [ -f "repositories.conf" ]; then
+    # 注意：修改此文件【绝对不会】影响生成的最终固件！
+    # 最终固件开机依然是纯正的官方源。
+    # 这里临时切成中科大源，只为了让 GitHub 编译机绕过防 D 墙，满速拉完这 400 多个包。
+    sed -i 's/downloads.immortalwrt.org/mirrors.ustc.edu.cn\/immortalwrt/g' repositories.conf
+    
+    # 强制转为 HTTP 协议，免去 400 多次 TLS 证书加密握手，大幅榨干 IO 性能
+    sed -i 's/https:\/\//http:\/\//g' repositories.conf
+    echo "✅ 编译机专用满速通道已建立，绕过限速盾，准备起飞！"
+fi
 
 echo ">>> 7. [多核极速] 开始 Make Image 打包 <<<"
 make image -j$(nproc) PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME="efi-Deluxe" KERNEL_PARTSIZE=64 ROOTFS_PARTSIZE="$ROOTFS_SIZE"
