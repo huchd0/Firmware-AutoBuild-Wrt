@@ -28,10 +28,10 @@ jobs:
           INPUT_VER="${{ inputs.openwrt_version }}"
           EVENT_NAME="${{ github.event_name }}"
           
-          # 1. 获取官方最新稳定版号 (保留了你的 -v 'rc' 过滤，防止抓到测试版)
+          # 1. 获取官方最新稳定版号 (加入 Token 验证，防止 API 频率限制报错)
           OFFICIAL_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/openwrt/openwrt/releases" | grep '"tag_name":' | grep -v 'rc' | head -n 1 | cut -d '"' -f 4 | sed 's/v//')
           
-          # 2. 【核心修改】获取本地最后发布：拉取所有 releases，专门筛选标题带有 "OpenWrt" 的记录
+          # 2. 获取本地最后发布
           MY_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | grep '"name":' | grep 'OpenWrt' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || echo "0.0.0")
 
           echo "官方最新版本: $OFFICIAL_LATEST"
@@ -92,26 +92,39 @@ jobs:
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: echo "BUILD_TIME=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
 
-      - name: 🗑️ 清理旧的同名 Release (确保完全覆盖不残留)
+      - name: 📏 获取固件实际大小
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: |
-          # 使用 GitHub CLI 删除旧的固定标签，忽略报错（首次运行可能不存在）
+          # 查找生成的 img 或 img.gz 文件，取体积最大的那个计算大小 (例如返回 120M)
+          FIRMWARE_SIZE=$(find imagebuilder/output-firmware/ -type f \( -name "*.img" -o -name "*.img.gz" \) -exec du -sh {} + | sort -hr | head -n 1 | awk '{print $1}')
+          
+          # 兜底逻辑：如果没匹配到特定后缀，就计算整个输出文件夹的总大小
+          if [ -z "$FIRMWARE_SIZE" ]; then
+            FIRMWARE_SIZE=$(du -sh imagebuilder/output-firmware/ | awk '{print $1}')
+          fi
+          
+          echo "FIRMWARE_SIZE=$FIRMWARE_SIZE" >> $GITHUB_ENV
+          echo "检测到固件实际大小为: $FIRMWARE_SIZE"
+
+      - name: 🗑️ 清理旧的同名 Release
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        run: |
           gh release delete OpenWrt-Latest -y --cleanup-tag || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🚀 自动发布到 Releases (覆盖模式)
+      - name: 🚀 自动发布到 Releases
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: OpenWrt-Latest  # 【核心修改】使用固定的 Tag
-          name: OpenWrt ${{ env.OWRT_VERSION }} 自动更新版 # 标题包含版本号，供下次 grep 识别
+          tag_name: OpenWrt-Latest
+          name: OpenWrt ${{ env.OWRT_VERSION }} 自动更新版
           files: imagebuilder/output-firmware/*
           body: |
             **🤖 OpenWrt 最新定制化固件自动更新**
             - **版本**: `${{ env.OWRT_VERSION }}`
-            - **固件大小**: 1GB
+            - **打包体积**: `${{ env.FIRMWARE_SIZE }}` (含 Docker 预留 ${ROOTFS_SIZE:-1024}MB 空间配置)
             - **构建时间**: `${{ env.BUILD_TIME }}`
             - **管理 IP**: `${{ env.MANAGEMENT_IP }}`
-            - **硬盘挂载**: 智能抓取 sda3 或 nvme0n1p3 动态绑定 (为 Docker 预留)
+            - **硬盘挂载**: 智能抓取 sda3 或 nvme0n1p3 动态绑定
             - **核心**: 已内置 OpenClash Meta 核心与 Argon 主题
