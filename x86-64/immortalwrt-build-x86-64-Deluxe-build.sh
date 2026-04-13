@@ -254,13 +254,6 @@ fi
 
 PACKAGES=$(echo "$RAW_PACKAGES" | sed 's/#.*//g' | tr -s ' \n' ' ')
 
-echo ">>> 6.5 [终极修复] 劫持并替换 ImageBuilder 软件源 (彻底绕过 Cloudflare 阻断) <<<"
-if [ -f "repositories.conf" ]; then
-    # 将源强行切换至清华大学 TUNA 镜像站，对 GitHub 的数据中心 IP 完全放行无脑满速
-    sed -i 's/downloads.immortalwrt.org/mirror.tuna.tsinghua.edu.cn\/immortalwrt/g' repositories.conf
-    echo "✅ 已成功劫持软件源至清华 TUNA 镜像站，防 D 墙已突破！"
-fi
-
 echo ">>> 7. [多核极速] 开始 Make Image 打包 <<<"
 make image -j$(nproc) PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME="efi-Deluxe" KERNEL_PARTSIZE=64 ROOTFS_PARTSIZE="$ROOTFS_SIZE"
 
