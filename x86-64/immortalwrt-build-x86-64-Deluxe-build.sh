@@ -484,7 +484,7 @@ ALL_PKGS=(
 PACKAGES="${ALL_PKGS[*]}"
 
 echo "=== 6. 开始 Make Image 打包 ==="
-# 【修改点 1】把 EXTRA_IMAGE_NAME="efi" 改成了 "efi-Deluxe"
+# 把 EXTRA_IMAGE_NAME="efi" 改成了 "efi-Deluxe"
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME="efi-Deluxe" KERNEL_PARTSIZE=64 ROOTFS_PARTSIZE="$ROOTFS_SIZE"
 
 echo "=== 7. 提取固件 ==="
