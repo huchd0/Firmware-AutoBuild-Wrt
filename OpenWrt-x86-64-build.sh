@@ -61,7 +61,7 @@ uci delete network.lan.type 2>/dev/null
 # --- 系统基础设置 (时区与主机名) ---
 uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
-uci set system.@system[0].hostname='Tanxmix'
+uci set system.@system[0].hostname='Tanxm'
 uci commit system
 
 # --- B. 智能网口分配逻辑 ---
