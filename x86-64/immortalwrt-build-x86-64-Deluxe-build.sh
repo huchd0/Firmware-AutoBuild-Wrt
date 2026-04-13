@@ -9,9 +9,9 @@ INCLUDE_DOCKER=${INCLUDE_DOCKER:-"yes"}
 PPPOE_ACCOUNT=${PPPOE_ACCOUNT:-""}
 PPPOE_PASSWORD=${PPPOE_PASSWORD:-""}
 
-# 缓存目录设定 (映射自宿主机)
-DL_CACHE=${DL_CACHE_DIR:-"/home/build/immortalwrt/dl_cache"}
-mkdir -p "$DL_CACHE"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - 开始构建 J4125 Deluxe 固件..."
+echo "RootFS 大小: $ROOTFS_SIZE MB"
+echo "集成 Docker: $INCLUDE_DOCKER"
 
 echo ">>> 1. 自定义固件底层参数 (专属 J4125 互刷防掉盘) <<<"
 {
@@ -30,76 +30,23 @@ echo ">>> 1. 自定义固件底层参数 (专属 J4125 互刷防掉盘) <<<"
 echo ">>> 2. 准备初始化文件夹结构 <<<"
 mkdir -p files/root files/etc/uci-defaults files/etc/init.d files/usr/bin files/etc/openclash/core files/lib/firmware/mediatek/mt7925
 
-echo ">>> 3. [极限并发] 缓存提取与多线程切片下载组件 <<<"
-smart_dl() {
-    local URL=$1
-    local DEST=$2
-    local CACHE_FILE="$DL_CACHE/$(basename "$DEST")"
-    
-    if [ -s "$CACHE_FILE" ]; then
-        echo "⚡ [缓存命中] 极速复用: $(basename "$DEST")"
-        cp "$CACHE_FILE" "$DEST"
-    else
-        echo "⬇️ [Aria2 多线程下载] 未命中缓存: $(basename "$DEST")"
-        aria2c --console-log-level=error --summary-interval=0 -x 4 -s 4 -d "$(dirname "$DEST")" -o "$(basename "$DEST")" "$URL" || true
-        [ -s "$DEST" ] && cp "$DEST" "$CACHE_FILE"
-    fi
-}
+echo ">>> 3. 下载必要的核心组件 (Meta内核 + 官方驱动) <<<"
+# 下载 OpenClash Meta 内核与规则库
+echo "正在注入 OpenClash Meta 内核及 Geo 数据..."
+wget -qO- "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-compatible.tar.gz" | tar xOvz > files/etc/openclash/core/clash_meta
+chmod +x files/etc/openclash/core/clash_meta
+wget -qO files/etc/openclash/GeoIP.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+wget -qO files/etc/openclash/GeoSite.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 
-GH_HEADER=""
-[ -n "$GITHUB_TOKEN" ] && GH_HEADER="-H \"Authorization: Bearer $GITHUB_TOKEN\""
-
-echo "正在并发获取 GitHub 最新 Releases 下载链接..."
-OPENCLASH_URL=$(eval curl -s $GH_HEADER https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
-ARGON_URL=$(eval curl -s $GH_HEADER https://api.github.com/repos/jerrykuku/luci-theme-argon/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
-
-echo "开启并发下载池..."
-( [ -n "$OPENCLASH_URL" ] && smart_dl "$OPENCLASH_URL" files/root/luci-app-openclash.apk ) &
-( [ -n "$ARGON_URL" ] && smart_dl "$ARGON_URL" files/root/luci-theme-argon.apk ) &
-( smart_dl "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-compatible.tar.gz" files/etc/openclash/core/meta.tar.gz ) &
-
-( smart_dl "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin" files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin ) &
-( smart_dl "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin" files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin ) &
-( smart_dl "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin" files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin ) &
-
-wait
-echo "✅ 所有组件及底层驱动准备完毕！"
-
-if [ -f files/etc/openclash/core/meta.tar.gz ]; then
-    tar -zxf files/etc/openclash/core/meta.tar.gz -C files/etc/openclash/core/
-    mv files/etc/openclash/core/clash files/etc/openclash/core/clash_meta
-    chmod +x files/etc/openclash/core/clash_meta
-    rm -f files/etc/openclash/core/meta.tar.gz
-fi
+# 下载 MT7925 Wi-Fi 7 底层固件
+echo "正在注入 MT7925 底层固件..."
+FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/mt7925"
+wget -qO files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin "$FW_URL/BT_RAM_CODE_MT7925_1_1_hdr.bin"
+wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin "$FW_URL/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin"
+wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin "$FW_URL/WIFI_RAM_CODE_MT7925_1_1.bin"
 
 
-echo ">>> 4. 编写全自动静默升级脚本 <<<"
-cat << 'EOF_UPGRADE' > files/usr/bin/upg
-#!/bin/sh
-LOGFILE="/root/upg.log"
-[ -f "$LOGFILE" ] && [ $(wc -c < "$LOGFILE") -gt 1048576 ] && echo "日志过大，已清空重建" > "$LOGFILE"
-echo "===== Auto Upgrade Start: $(date) =====" >> "$LOGFILE"
-
-if command -v apk >/dev/null 2>&1; then
-    openclash_before=$(apk info -v luci-app-openclash 2>/dev/null)
-    apk update >> "$LOGFILE" 2>&1
-    apk upgrade >> "$LOGFILE" 2>&1
-    openclash_after=$(apk info -v luci-app-openclash 2>/dev/null)
-else
-    echo "仅支持 apk 包管理器。" >> "$LOGFILE"
-    exit 1
-fi
-
-if [ -n "$openclash_before" ] && [ "$openclash_before" != "$openclash_after" ]; then
-    echo "OpenClash 已升级，正在重启服务..." >> "$LOGFILE"
-    /etc/init.d/openclash restart >> "$LOGFILE" 2>&1
-fi
-echo "===== Auto Upgrade End: $(date) =====" >> "$LOGFILE"
-EOF_UPGRADE
-chmod +x files/usr/bin/upg
-
-
-echo ">>> 5. 生成开机首启初始化脚本 (纯净官方源版本) <<<"
+echo ">>> 4. 生成开机首启初始化脚本 (含自动拨号与 Docker 网络注入) <<<"
 cat << EOF > files/etc/uci-defaults/99-custom-setup
 #!/bin/sh
 
@@ -198,27 +145,11 @@ if [ "$INCLUDE_DOCKER" = "yes" ]; then
     fi
 fi
 
-echo "0 2 */2 * * /usr/bin/upg" >> /etc/crontabs/root
-/etc/init.d/cron restart 2>/dev/null || true
-
-(
-    WAIT_NET=0
-    while [ \$WAIT_NET -lt 30 ]; do
-        if ping -c 1 -W 2 223.5.5.5 >/dev/null 2>&1; then
-            apk update
-            apk add luci-app-ttyd luci-i18n-ttyd-zh-cn
-            apk add -q --allow-untrusted /root/*.apk
-            rm -f /root/*.apk
-            
-            if uci get luci.themes.Argon >/dev/null 2>&1; then
-                uci set luci.main.mediaurlbase='/luci-static/argon'
-                uci commit luci
-            fi
-            break
-        fi
-        sleep 5; WAIT_NET=\$((WAIT_NET+1))
-    done
-) &
+# 激活 Argon 主题
+if uci get luci.themes.Argon >/dev/null 2>&1; then
+    uci set luci.main.mediaurlbase='/luci-static/argon'
+    uci commit luci
+fi
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
@@ -226,48 +157,33 @@ EOF
 chmod +x files/etc/uci-defaults/99-custom-setup
 
 
-echo ">>> 6. 配置官方纯净软件列表 <<<"
+echo ">>> 5. 组装极简官方软件列表 <<<"
+# 放弃长篇大论的依赖列举，直接写核心大包，让 ImageBuilder 自动解决底层依赖
+PACKAGES=""
+# 1. 基础系统与中文界面
+PACKAGES="$PACKAGES luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-ttyd-zh-cn"
+# 2. 磁盘与文件系统支持
+PACKAGES="$PACKAGES block-mount fdisk parted lsblk e2fsprogs kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-exfat kmod-usb-storage-uas"
+# 3. 基础工具与网络排错
+PACKAGES="$PACKAGES bash curl jq unzip nano htop tcpdump mtr iwinfo"
+# 4. Wi-Fi 7 与 蓝牙 硬件支持 (MT7925)
+PACKAGES="$PACKAGES kmod-mt7925e kmod-mt7925-firmware kmod-btusb wpad-openssl"
+# 5. 高级网络管理与统计
+PACKAGES="$PACKAGES luci-i18n-ksmbd-zh-cn luci-i18n-nlbwmon-zh-cn luci-i18n-statistics-zh-cn"
+# 6. 核心科学与主题插件 (直接从官方源拉取，告别手动下载)
+PACKAGES="$PACKAGES luci-app-openclash luci-theme-argon luci-app-argon-config"
 
-RAW_PACKAGES="
-    -dnsmasq dnsmasq-full luci luci-base luci-compat luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn
-    block-mount blkid lsblk parted fdisk e2fsprogs kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat kmod-fs-exfat
-    coreutils-nohup coreutils-base64 coreutils-sort bash jq curl ca-bundle libcap libcap-bin ruby ruby-yaml unzip
-    ip-full iptables-mod-tproxy iptables-mod-extra kmod-tun kmod-inet-diag kmod-nft-tproxy kmod-igc kmod-igb kmod-r8169 iwinfo
-    -wpad-basic-mbedtls -wpad-basic-wolfssl wpad-openssl kmod-mt7925e kmod-mt7925-firmware kmod-btusb
-    nano htop ethtool tcpdump mtr conntrack iftop screen collectd-mod-thermal collectd-mod-sensors collectd-mod-cpu collectd-mod-ping collectd-mod-interface collectd-mod-rrdtool collectd-mod-iwinfo
-    luci-app-ksmbd luci-i18n-ksmbd-zh-cn luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn luci-app-statistics luci-i18n-statistics-zh-cn
-"
-
+# 若开启 Docker 则添加相关插件
 if [ "$INCLUDE_DOCKER" = "yes" ]; then
-    RAW_PACKAGES="$RAW_PACKAGES dockerd docker-compose kmod-veth kmod-macvlan kmod-dummy luci-app-dockerman luci-i18n-dockerman-zh-cn"
-    echo "🐳 已激活 Docker 组件及相关网络内核支持"
+    PACKAGES="$PACKAGES dockerd docker-compose kmod-veth kmod-macvlan kmod-dummy luci-app-dockerman luci-i18n-dockerman-zh-cn"
 fi
 
-PACKAGES=$(echo "$RAW_PACKAGES" | sed 's/#.*//g' | tr -s ' \n' ' ')
+echo "最终构建包列表: $PACKAGES"
 
-echo ">>> 6.5 [终极网络提速] 劫持编译机临时源 (保证软路由开机仍为纯净官方源) <<<"
+echo ">>> 6. [极速原生] 开始 Make Image 打包 <<<"
+make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME="efi-Deluxe" KERNEL_PARTSIZE=64 ROOTFS_PARTSIZE="$ROOTFS_SIZE"
 
-# 1. 强制 IPv4 优先，跳过 GitHub Actions 常见的 IPv6 寻址卡死
-echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf 2>/dev/null || true
-
-# 2. 清除之前可能卡死网络的僵尸 hosts 记录
-sed -i '/downloads.immortalwrt.org/d' /etc/hosts 2>/dev/null || true
-sed -i '/sysupgrade.immortalwrt.org/d' /etc/hosts 2>/dev/null || true
-
-# 3. 【核心魔法】把 GitHub 机器的临时拉包源换成中科大，满速爆发！
-if [ -f "repositories.conf" ]; then
-    # ⚠️ 郑重承诺：这绝对不会影响你最终生成的软路由固件，固件开机后必定是官方源！
-    sed -i 's/downloads.immortalwrt.org/mirrors.ustc.edu.cn\/immortalwrt/g' repositories.conf
-    
-    # 强制转为 HTTP 协议，免去 400 多次 TLS 证书加密握手，进一步榨干 IO 性能
-    sed -i 's/https:\/\//http:\/\//g' repositories.conf
-    echo "✅ 编译机专用满速通道已建立，绕过限速盾，准备起飞！"
-fi
-
-echo ">>> 7. [多核极速] 开始 Make Image 打包 <<<"
-make image -j$(nproc) PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME="efi-Deluxe" KERNEL_PARTSIZE=64 ROOTFS_PARTSIZE="$ROOTFS_SIZE"
-
-echo ">>> 8. 剔除多余格式，确保仅输出 combined-efi <<<"
+echo ">>> 7. 剔除多余格式，提取固件 <<<"
 find bin/targets/x86/64/ -type f -not -name "*combined-efi*.img.gz" -not -name "*sha256sums" -delete
 
-echo ">>> 全部任务以极限速度构建完毕！ <<<"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - 构建任务完美完成！"
