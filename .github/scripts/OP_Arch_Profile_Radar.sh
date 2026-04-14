@@ -145,16 +145,15 @@ if [ -n "$RAW_ARCH" ]; then
 else
     echo ">>> 正在剥离前端外壳，深入镜像节点抓取架构池..."
     
-    # 🌟 优化 1：主信道切换。优先使用中科大(USTC)镜像源，因为官方源对 GitHub IP 有严厉的 Cloudflare 拦截
     MIRROR_BASE="https://mirrors.ustc.edu.cn/immortalwrt/releases/${VERSION}/targets"
     OFFICIAL_BASE="https://downloads.immortalwrt.org/releases/${VERSION}/targets"
     
-    # 抓取第一级主架构目录
-    TARGETS=$(curl -sL --max-time 10 "${MIRROR_BASE}/" 2>/dev/null | grep -oE '<a href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g')
-    [ -z "$TARGETS" ] && TARGETS=$(curl -sL --max-time 10 "${OFFICIAL_BASE}/" 2>/dev/null | grep -oE '<a href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g')
+    # 🌟 终极优化 1：无视 HTML 差异的暴力提取正则，绝不漏抓任何目录
+    TARGETS=$(curl -sL --max-time 10 "${MIRROR_BASE}/" 2>/dev/null | grep -oE 'href="[^"]+/"' | cut -d'"' -f2 | grep -vE "^(\.\.|/|http)" | sed 's/\///g')
+    [ -z "$TARGETS" ] && TARGETS=$(curl -sL --max-time 10 "${OFFICIAL_BASE}/" 2>/dev/null | grep -oE 'href="[^"]+/"' | cut -d'"' -f2 | grep -vE "^(\.\.|/|http)" | sed 's/\///g')
     
     if [ -z "$TARGETS" ]; then
-        echo "❌ 第一级目录抓取失败，请检查网络。"
+        echo "❌ 第一级目录抓取失败，请确认版本号 ($VERSION) 是否在服务器上真实存在。"
         exit 1
     fi
     
@@ -164,19 +163,22 @@ t="$1"
 ver="$2"
 mir="https://mirrors.ustc.edu.cn/immortalwrt/releases/${ver}/targets"
 off="https://downloads.immortalwrt.org/releases/${ver}/targets"
-# 优先尝试镜像站抓取子目录
-res=$(curl -sL --max-time 10 "${mir}/${t}/" 2>/dev/null | grep -oE '<a href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g' | sed "s/^/$t-/")
-[ -z "$res" ] && res=$(curl -sL --max-time 10 "${off}/${t}/" 2>/dev/null | grep -oE '<a href="[a-zA-Z0-9_-]+/"' | cut -d'"' -f2 | sed 's/\///g' | sed "s/^/$t-/")
+res=$(curl -sL --max-time 10 "${mir}/${t}/" 2>/dev/null | grep -oE 'href="[^"]+/"' | cut -d'"' -f2 | grep -vE "^(\.\.|/|http)" | sed 's/\///g' | sed "s/^/$t-/")
+[ -z "$res" ] && res=$(curl -sL --max-time 10 "${off}/${t}/" 2>/dev/null | grep -oE 'href="[^"]+/"' | cut -d'"' -f2 | grep -vE "^(\.\.|/|http)" | sed 's/\///g' | sed "s/^/$t-/")
 echo "$res"
 EOF
     chmod +x /tmp/get_sub.sh
     
-    # 🌟 优化 2：并发数从默认的过高状态降低到 8，保证稳定性不掉线
-    ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 8 /tmp/get_sub.sh "{}" "$VERSION")
+    ARCH_LIST=$(printf "%s\n" "$TARGETS" | xargs -I {} -P 8 /tmp/get_sub.sh "{}" "$VERSION" | grep -v "^$")
     
     echo ">>> 成功突破迷雾，锁定 $(echo "$ARCH_LIST" | wc -w) 个独立子架构！"
-    echo ">>> 🚦 正在启动【高稳定性下载通道】提取海量设备特征..."
     
+    # 🌟 终极优化 2：开启天眼，打印到底抓到了哪些架构
+    echo ">>> 🐛 [Debug 诊断] 当前抓取到的架构清单："
+    echo "$ARCH_LIST" | tr '\n' ' '
+    echo -e "\n"
+    
+    echo ">>> 🚦 正在启动【高稳定性下载通道】提取海量设备特征..."
     mkdir -p /tmp/profiles
     
     cat << 'EOF' > /tmp/fetch_json.sh
@@ -187,7 +189,6 @@ subpath=$(echo "$arch" | tr "-" "/")
 URL="https://mirrors.ustc.edu.cn/immortalwrt/releases/${ver}/targets/${subpath}/profiles.json"
 FALLBACK="https://downloads.immortalwrt.org/releases/${ver}/targets/${subpath}/profiles.json"
 
-# 优先拉取镜像站数据，失败再由官方节点兜底
 if ! curl -sL -f --connect-timeout 5 --max-time 15 -o "/tmp/profiles/${arch}_raw.json" "$URL" 2>/dev/null; then
     curl -sL -f --connect-timeout 5 --max-time 15 -o "/tmp/profiles/${arch}_raw.json" "$FALLBACK" 2>/dev/null || true
 fi
@@ -198,7 +199,6 @@ fi
 EOF
     chmod +x /tmp/fetch_json.sh
     
-    # 🌟 优化 3：提取 JSON 并发限制在 10，兼顾速度与防刷机制
     printf "%s\n" "$ARCH_LIST" | xargs -I {} -P 10 /tmp/fetch_json.sh "{}" "$VERSION"
     
     cat /tmp/profiles/*.txt > /tmp/all_list.txt 2>/dev/null || true
