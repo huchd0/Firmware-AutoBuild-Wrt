@@ -2,16 +2,32 @@ name: Aoto-OpenWrt-x86_64-智能自动编译发布
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  MANAGEMENT_IP: '192.168.100.1' # 全局后台地址配置
-  ROOTFS_SIZE: '1024' # 🌟 在这里统一设置 RootFS 大小，方便全局调用
+  # 🌟 动态读取面板输入。如果是定时任务自动运行，则自动降级使用后面的默认值
+  MANAGEMENT_IP: ${{ inputs.custom_ip || '192.168.100.1' }}
+  ROOTFS_SIZE: ${{ inputs.profile || '1024' }}
 
 on:
   workflow_dispatch:
     inputs:
       openwrt_version:
-        description: '选择版本 (留空或填 latest 自动抓取最新版)'
-        required: false
+        description: 'OpenWrt 版本(latest智能选择最新版本)'
+        required: true
         default: 'latest'
+        type: choice
+        options:
+          - 'latest'
+          - '23.05.5'
+          - '23.05.4'
+          # 你可以继续在这里添加需要的具体版本号
+      profile:
+        description: 'RootFS 分区大小 (单位: MB)'
+        required: true
+        default: '1024'
+        type: string
+      custom_ip:
+        description: '路由器管理地址 (仅填IP，无需加掩码)'
+        required: true
+        default: '192.168.100.1'
         type: string
   schedule:
     - cron: '0 0 * * *'
