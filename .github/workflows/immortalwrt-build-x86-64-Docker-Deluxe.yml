@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # 【核心修复】全局映射 Action 输入为环境变量，避免 Bash 语法崩溃
+      # 全局映射 Action 输入为环境变量，避免 Bash 语法崩溃
       INPUT_VERSION: ${{ github.event.inputs.luci_version }}
       INPUT_IP: ${{ github.event.inputs.custom_router_ip }}
       INPUT_ROOTFS: ${{ github.event.inputs.rootfs_size }}
@@ -135,7 +135,7 @@ jobs:
           fi
 
           cat > ${{ github.workspace }}/router-info.md <<EOF
-          ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} 高级定制固件
+          ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} 高级定制固件-Deluxe
           
           > 本固件由 GitHub Actions 驱动 \`ImageBuilder\` 全自动构建，专为 x86-64 物理机与虚拟机优化。
           
