@@ -136,38 +136,46 @@ if uci get luci.themes.Argon >/dev/null 2>&1; then
     uci commit luci
 fi
 
-# E. Wi-Fi 7 无线网络配置 (MT7925)
-# 触发系统生成默认的无线配置文件
-wifi config >/dev/null 2>&1 || true
+# E. Wi-Fi 7 后台安全配置逻辑 (防抓空/防死配置机制)
+(
+    # 轮询等待底层网卡驱动和固件加载，最多等待 60 秒 (30次 x 2秒)
+    for i in \$(seq 1 30); do
+        # 尝试生成默认无线配置
+        wifi config >/dev/null 2>&1
+        # 检查 UCI 中是否成功生成了包含底层硬件绑定(path/mac)的 radio0
+        if uci get wireless.radio0 >/dev/null 2>&1; then
+            break
+        fi
+        sleep 2
+    done
 
-# 稍微等待一下确保文件生成
-sleep 2
+    # 只有确信 radio0 的底层配置已经成功生成后，才覆盖我们的自定义参数
+    if uci get wireless.radio0 >/dev/null 2>&1; then
+        uci set wireless.radio0.band='5g'
+        uci set wireless.radio0.channel='149'
+        uci set wireless.radio0.country='CN'
+        uci set wireless.radio0.cell_density='0'
+        uci set wireless.radio0.disabled='0'  # 0代表开启
 
-if [ -f "/etc/config/wireless" ]; then
-    # 修改底层 Radio 配置
-    uci set wireless.radio0.band='5g'
-    uci set wireless.radio0.channel='149'
-    uci set wireless.radio0.country='CN'
-    uci set wireless.radio0.cell_density='0'
-    uci set wireless.radio0.disabled='0'
+        # 如果接口尚未生成，补齐接口配置
+        if ! uci get wireless.default_radio0 >/dev/null 2>&1; then
+            uci set wireless.default_radio0=wifi-iface
+            uci set wireless.default_radio0.device='radio0'
+            uci set wireless.default_radio0.network='lan'
+            uci set wireless.default_radio0.mode='ap'
+        fi
 
-    # 修改/创建对应的前端网络接口
-    if ! uci get wireless.default_radio0 >/dev/null 2>&1; then
-        uci set wireless.default_radio0=wifi-iface
-        uci set wireless.default_radio0.device='radio0'
-        uci set wireless.default_radio0.network='lan'
-        uci set wireless.default_radio0.mode='ap'
+        uci set wireless.default_radio0.encryption='sae-mixed'
+        uci set wireless.default_radio0.ssid='mywifi7'
+        uci set wireless.default_radio0.key='Aa666666'
+        uci set wireless.default_radio0.ocv='0'
+        uci set wireless.default_radio0.disabled='0'  # 0代表开启
+
+        uci commit wireless
+        # 配置完后，无缝重启无线服务使配置立即生效
+        wifi reload
     fi
-
-    # 密码和加密方式设置
-    uci set wireless.default_radio0.encryption='sae-mixed'
-    uci set wireless.default_radio0.ssid='mywifi7'
-    uci set wireless.default_radio0.key='Aa666666'
-    uci set wireless.default_radio0.ocv='0'
-    uci set wireless.default_radio0.disabled='0'
-
-    uci commit wireless
-fi
+) &
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
