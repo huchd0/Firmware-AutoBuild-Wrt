@@ -136,6 +136,39 @@ if uci get luci.themes.Argon >/dev/null 2>&1; then
     uci commit luci
 fi
 
+# E. Wi-Fi 7 无线网络配置 (MT7925)
+# 触发系统生成默认的无线配置文件
+wifi config >/dev/null 2>&1 || true
+
+# 稍微等待一下确保文件生成
+sleep 2
+
+if [ -f "/etc/config/wireless" ]; then
+    # 修改底层 Radio 配置
+    uci set wireless.radio0.band='5g'
+    uci set wireless.radio0.channel='149'
+    uci set wireless.radio0.country='CN'
+    uci set wireless.radio0.cell_density='0'
+    uci set wireless.radio0.disabled='0'
+
+    # 修改/创建对应的前端网络接口
+    if ! uci get wireless.default_radio0 >/dev/null 2>&1; then
+        uci set wireless.default_radio0=wifi-iface
+        uci set wireless.default_radio0.device='radio0'
+        uci set wireless.default_radio0.network='lan'
+        uci set wireless.default_radio0.mode='ap'
+    fi
+
+    # 密码和加密方式设置
+    uci set wireless.default_radio0.encryption='sae-mixed'
+    uci set wireless.default_radio0.ssid='mywifi7'
+    uci set wireless.default_radio0.key='Aa666666'
+    uci set wireless.default_radio0.ocv='0'
+    uci set wireless.default_radio0.disabled='0'
+
+    uci commit wireless
+fi
+
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
 EOF
