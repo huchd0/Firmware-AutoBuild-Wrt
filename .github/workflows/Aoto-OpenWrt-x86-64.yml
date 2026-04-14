@@ -134,7 +134,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: OpenWrt-Latest
-          name: OpenWrt ${{ env.OWRT_VERSION }} 自动更新版
+          name: OpenWrt ${{ env.OWRT_VERSION }} 每日检测-有新版本则自动更新
           files: imagebuilder/output-firmware/*
           body: |
             **🤖 OpenWrt 最新定制化固件自动更新**
