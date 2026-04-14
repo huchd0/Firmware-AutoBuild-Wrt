@@ -63,7 +63,7 @@ uci set network.lan.netmask='255.255.255.0'
 uci set network.lan.device='br-lan'
 uci delete network.lan.type 2>/dev/null
 
-# 【核心修复】：彻底清除官方默认生成的物理网口绑定(防止系统默认把 eth0 绑在 LAN 导致冲突)
+清除官方默认生成的物理网口绑定(防止系统默认把 eth0 绑在 LAN 导致冲突)
 while uci -q delete network.@device[0]; do :; done
 
 # 安全地创建属于我们的 br-lan 桥接设备
