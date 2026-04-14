@@ -131,18 +131,67 @@ exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-custom-setup
 
-echo ">>> 5. 配置官方软件列表 (纯净极简版) <<<"
-# 追加了 e2fsprogs 以支持 mkfs.ext4 和 resize2fs (为 Docker 分区做准备)
-PACKAGES="-dnsmasq dnsmasq-full \
-luci luci-base luci-compat luci-i18n-base-zh-cn \
-luci-i18n-firewall-zh-cn \
-luci-i18n-package-manager-zh-cn \
-luci-app-ttyd luci-i18n-ttyd-zh-cn \
-luci-app-ksmbd luci-i18n-ksmbd-zh-cn \
-block-mount blkid lsblk parted fdisk e2fsprogs \
-kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-ntfs3 kmod-fs-vfat \
-coreutils-nohup bash curl ca-bundle ip-full iptables-mod-tproxy iptables-mod-extra \
-libcap libcap-bin ruby ruby-yaml kmod-tun kmod-inet-diag unzip kmod-nft-tproxy kmod-igc iwinfo"
+echo ">>> 5. 配置官方软件列表 <<<"
+
+declare -a PKG_LIST=(
+
+    # 🌐 1. 核心网络控制
+    "-dnsmasq"                          # [卸载] 自带的简配版 dnsmasq
+    "dnsmasq-full"                      # [安装] 功能完整的 dnsmasq-full (OpenClash 等强依赖)
+
+    # 🖥️ 2. Web 管理界面 (LuCI) & 全局中文
+    "luci"                              # 基础框架界面
+    "luci-base"                         # LuCI 底层依赖
+    "luci-compat"                       # LuCI 兼容包
+    "luci-i18n-base-zh-cn"              # 基础设置中文包
+    "luci-i18n-firewall-zh-cn"          # 防火墙中文包
+    "luci-i18n-package-manager-zh-cn"   # 软件包管理器中文包
+
+    # 🔌 3. 实用功能插件
+    "luci-app-ttyd"                     # 网页版命令行终端 (浏览器里敲代码)
+    "luci-i18n-ttyd-zh-cn"              # 终端中文包
+    "luci-app-ksmbd"                    # 局域网文件共享 (轻量高效的 NAS 功能)
+    "luci-i18n-ksmbd-zh-cn"             # 共享中文包
+
+    # 💾 4. 磁盘管理与分区工具 (扩容与 Docker 必备)
+    "block-mount"                       # 自动挂载工具
+    "blkid"                             # 查看磁盘 UUID
+    "lsblk"                             # 列出系统磁盘信息
+    "parted"                            # 高级磁盘分区工具
+    "fdisk"                             # 基础磁盘分区工具
+    "e2fsprogs"                         # ext4 格式化工具
+
+    # 💽 5. 存储设备驱动 & 文件系统支持
+    "kmod-usb-storage"                  # USB 存储核心驱动
+    "kmod-usb-storage-uas"              # USB UASP 协议加速驱动
+    "kmod-fs-ext4"                      # EXT4 格式支持
+    "kmod-fs-ntfs3"                     # NTFS 格式支持 (Windows 硬盘)
+    "kmod-fs-vfat"                      # FAT/FAT32 格式支持 (老U盘)
+
+    # ⚙️ 6. 核心底层依赖 (OpenClash 等代理插件所需)
+    "coreutils-nohup"                   # 后台运行支持
+    "bash"                              # 强大的终端 Shell
+    "curl"                              # 网络请求下载工具
+    "ca-bundle"                         # 根证书 (HTTPS必备)
+    "ip-full"                           # 完整版 IP 路由控制
+    "iptables-mod-tproxy"               # iptables 透明代理模块
+    "iptables-mod-extra"                # iptables 额外模块
+    "kmod-tun"                          # TUN 虚拟网卡驱动
+    "kmod-inet-diag"                    # 网络连接诊断驱动
+    "kmod-nft-tproxy"                   # nftables 透明代理模块
+    "libcap"                            # 权限管理核心
+    "libcap-bin"                        # 权限管理工具
+    "ruby"                              # Ruby 运行环境
+    "ruby-yaml"                         # Ruby YAML 解析
+    "unzip"                             # 解压缩工具
+
+    # 💻 7. 物理网卡驱动 & 无线工具
+    "kmod-igc"                          # Intel i225/i226 2.5G 网卡驱动
+    "iwinfo"                            # 无线网络信息查看工具
+)
+
+# 魔法操作：将上面的数组自动转换成以空格分隔的一整行字符串，完美交给 make 命令
+PACKAGES="${PKG_LIST[*]}"
 
 echo ">>> 6. 开始 Make Image 打包 <<<"
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files"
