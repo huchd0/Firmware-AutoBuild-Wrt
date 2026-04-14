@@ -10,7 +10,7 @@
 
 > **💡 提示**：重要提示：在编译 OpenWrt / ImmortalWrt 固件时，若架构（Arch）选择错误，可能导致固件无法刷入或设备变砖。因此，务必事先核对芯片平台对应的 Arch，以及设备专属的 Profile 名称。
 
-需要特别注意的是，OpenWrt/ImmortalWrt 社区中存在一定的“命名历史遗留问题”。例如，在匹配品牌 Xiaomi 时，系统可能会误匹配到包含 “xiaomi” 字符串的设备标识（Profile）（如 xiaomi_redmi-router-ax6000），从而产生错误的Profile，建议用工具🔍 OP Arch & Profile Rada（嵌入式设备寻址雷达）交叉查询以保证信息准确。
+需要特别注意的是，OpenWrt/ImmortalWrt 社区中存在一定的“命名历史遗留问题”。例如，在匹配品牌 Xiaomi 时，系统可能会误匹配到包含 “xiaomi” 字符串的设备标识（Profile）（如 xiaomi_redmi-router-ax6000），从而产生了错误的固件。生产固件前需要用工具🔍 OP Arch & Profile Rada（嵌入式设备寻址雷达）交叉查询，设备信息尽量填写多项并且准确。
 
 > 此外，部分高通版本由于其核心加速组件 NSS（Network SubSystem）相关代码为闭源和分区的复杂性的设备，官方并未提供对应镜像支持。这类设备通常无法通过 ImageBuilder 直接生成固件，只能通过完整源码编译实现。
 
