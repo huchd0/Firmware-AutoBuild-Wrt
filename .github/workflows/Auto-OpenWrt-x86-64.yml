@@ -1,233 +1,167 @@
-name: Auto-ImmortalWrt-x86_64-智能自动编译发布
+name: Auto-OpenWrt-x86_64-智能自动编译发布
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # 🌟 动态读取面板输入。如果是定时任务自动运行，则自动降级使用后面的默认值
+  MANAGEMENT_IP: ${{ inputs.custom_ip || '192.168.100.1' }}
+  ROOTFS_SIZE: ${{ inputs.profile || '1024' }}
 
 on:
   workflow_dispatch:
     inputs:
-      # ====== 基础设定 (3个) ======
-      luci_version:
-        description: "选择版本 (Auto 抓取最新稳定版/RC版)"
-        required: false
-        default: "Auto"
+      openwrt_version:
+        description: 'OpenWrt 版本(latest智能选择最新版本)'
+        required: true
+        default: 'latest'
         type: choice
-        options: [ 'Auto', '24.10.5', '25.12.0-rc1' ]
-      custom_router_ip:
-        description: "设置管理地址"
+        options:
+          - 'latest'
+          - '23.05.5'
+          - '23.05.4'
+          # 你可以继续在这里添加需要的具体版本号
+      profile:
+        description: 'RootFS 分区大小 (单位: MB)'
         required: true
-        default: "192.168.100.1"
-      rootfs_size:
-        description: '核心系统最终容量 (MB) - 云端将极速打包512MB，开机自动拉伸至此值'
+        default: '1024'
+        type: string
+      custom_ip:
+        description: '路由器管理地址 (仅填IP，无需加掩码)'
         required: true
-        default: '10240'
-        
-      # ====== 核心网络与存储 (5个) ======
-      include_docker:
-        description: "🐳 集成 Docker 引擎及网络互通"
-        type: boolean
-        default: true
-      app_homeproxy:
-        description: "🛡️ 集成 HomeProxy (全能科学代理)"
-        type: boolean
-        default: true
-      app_openclash:
-        description: "🔌 集成 OpenClash (科学内核与界面)"
-        type: boolean
-        default: false
-      app_passwall:
-        description: "🚀 集成 PassWall (老牌高阶科学插件)"
-        type: boolean
-        default: false
-      app_ksmbd:
-        description: "📁 集成 KSMBD (局域网极速共享)"
-        type: boolean
-        default: true
-
-      # ====== 常用扩展工具 (12个) ======
-      theme_argon:
-        description: "🎨 集成 Argon 主题 (仅主题无控制面板)"
-        type: boolean
-        default: true
-      app_adguardhome:
-        description: "🛑 集成 AdGuardHome (全网去广告)"
-        type: boolean
-        default: false
-      app_alist:
-        description: "🗂️ 集成 AList (多存储网盘挂载)"
-        type: boolean
-        default: false
-      app_qbittorrent:
-        description: "🧲 集成 qBittorrent (BT/PT 专业下载)"
-        type: boolean
-        default: false
-      app_mwan3:
-        description: "⚖️ 集成 MWAN3 (多线多拨/负载均衡)"
-        type: boolean
-        default: false
-      app_vlmcsd:
-        description: "🔑 集成 KMS (Windows/Office 激活服务)"
-        type: boolean
-        default: false
-      app_statistics:
-        description: "📊 集成 Statistics (图形化状态监控)"
-        type: boolean
-        default: true
-      app_sqm:
-        description: "🚦 集成 SQM QoS (防网络拥塞稳定Ping)"
-        type: boolean
-        default: false
-      app_wireguard:
-        description: "🛡️ 集成 WireGuard (轻量级 VPN)"
-        type: boolean
-        default: false
-      app_tailscale:
-        description: "🕸️ 集成 Tailscale (异地 Mesh 组网)"
-        type: boolean
-        default: false
-      app_zerotier:
-        description: "🌍 集成 ZeroTier (虚拟局域网)"
-        type: boolean
-        default: false
-      app_frpc:
-        description: "🚇 集成 FRP 客户端 (内网穿透)"
-        type: boolean
-        default: false
-
-      # ====== 独立实体网卡驱动 (5个) ======
-      kmod_igc:
-        description: "🔌 驱动: Intel i225/i226 (2.5G)"
-        type: boolean
-        default: true
-      kmod_ixgbe:
-        description: "🔌 驱动: Intel 10G (万兆)"
-        type: boolean
-        default: false
-      kmod_e1000e:
-        description: "🔌 驱动: Intel 千兆"
-        type: boolean
-        default: false
-      kmod_r8169:
-        description: "🔌 驱动: Realtek 瑞昱千兆"
-        type: boolean
-        default: false
-      kmod_r8125:
-        description: "🔌 驱动: Realtek 瑞昱 2.5G"
-        type: boolean
-        default: false
+        default: '192.168.100.1'
+        type: string
+  schedule:
+    - cron: '0 0 * * *'
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      INPUT_VERSION: ${{ github.event.inputs.luci_version }}
-      INPUT_IP: ${{ github.event.inputs.custom_router_ip }}
-      INPUT_ROOTFS: ${{ github.event.inputs.rootfs_size }}
-      
-      INPUT_DOCKER: ${{ github.event.inputs.include_docker }}
-      INPUT_APP_HOMEPROXY: ${{ github.event.inputs.app_homeproxy }}
-      INPUT_APP_OPENCLASH: ${{ github.event.inputs.app_openclash }}
-      INPUT_APP_PASSWALL: ${{ github.event.inputs.app_passwall }}
-      INPUT_APP_KSMBD: ${{ github.event.inputs.app_ksmbd }}
-      INPUT_THEME_ARGON: ${{ github.event.inputs.theme_argon }}
-      INPUT_APP_ADGUARDHOME: ${{ github.event.inputs.app_adguardhome }}
-      INPUT_APP_ALIST: ${{ github.event.inputs.app_alist }}
-      INPUT_APP_QBITTORRENT: ${{ github.event.inputs.app_qbittorrent }}
-      INPUT_APP_MWAN3: ${{ github.event.inputs.app_mwan3 }}
-      INPUT_APP_VLMCSD: ${{ github.event.inputs.app_vlmcsd }}
-      INPUT_APP_STATISTICS: ${{ github.event.inputs.app_statistics }}
-      INPUT_APP_SQM: ${{ github.event.inputs.app_sqm }}
-      INPUT_APP_WIREGUARD: ${{ github.event.inputs.app_wireguard }}
-      INPUT_APP_TAILSCALE: ${{ github.event.inputs.app_tailscale }}
-      INPUT_APP_ZEROTIER: ${{ github.event.inputs.app_zerotier }}
-      INPUT_APP_FRPC: ${{ github.event.inputs.app_frpc }}
-      INPUT_KMOD_IGC: ${{ github.event.inputs.kmod_igc }}
-      INPUT_KMOD_IXGBE: ${{ github.event.inputs.kmod_ixgbe }}
-      INPUT_KMOD_E1000E: ${{ github.event.inputs.kmod_e1000e }}
-      INPUT_KMOD_R8169: ${{ github.event.inputs.kmod_r8169 }}
-      INPUT_KMOD_R8125: ${{ github.event.inputs.kmod_r8125 }}
-      
+  check_and_build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4.2.2
+      - name: Checkout 代码
+        uses: actions/checkout@v4
 
-      - name: Set executable permissions
+      - name: 🔍 检测官方与本地版本是否一致
+        id: check_version
         run: |
-          sed -i 's/\r$//' ${{ github.workspace }}/x86-64/auto-build-script.sh
-          chmod +x ${{ github.workspace }}/x86-64/auto-build-script.sh
+          INPUT_VER="${{ inputs.openwrt_version }}"
+          EVENT_NAME="${{ github.event_name }}"
+          
+          # 1. 获取官方最新稳定版号 (排除 SNAPSHOT 标签)
+          OFFICIAL_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/openwrt/openwrt/releases" | grep '"tag_name":' | grep -v 'SNAPSHOT' | head -n 1 | cut -d '"' -f 4 | sed 's/v//')
+          
+          # 2. 获取本地最后发布 (兼容 rc 版本的正则匹配)
+          MY_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | grep '"name":' | grep 'OpenWrt' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?' | head -n 1 || echo "0.0.0")
 
-      - name: Generate build timestamp
-        id: date
-        run: echo "DATE=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+          # 🌟 控制台直观日志输出
+          echo "========================================"
+          echo "官方最新版本: $OFFICIAL_LATEST"
+          echo "本地最后发布: $MY_LATEST"
+          echo "========================================"
 
-      - name: 🔍 解析 Auto 版本号
-        id: resolve_version
-        run: |
-          if [ "$INPUT_VERSION" == "Auto" ]; then
-            LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
-            echo "FINAL_VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          # 🌟 写入 GitHub Actions 首页摘要面板 (Job Summary)
+          echo "### 🤖 固件版本检测摘要" >> $GITHUB_STEP_SUMMARY
+          echo "| 检测项 | 版本号 |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🌐 **官方最新版本** | \`$OFFICIAL_LATEST\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🏠 **本地最后发布** | \`$MY_LATEST\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY # 空行分隔
+
+          # 3. 智能判断逻辑
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            echo "▶️ 状态: 手动触发模式！强制执行编译。"
+            echo "**▶️ 运行状态:** 手动触发，强制执行编译任务。" >> $GITHUB_STEP_SUMMARY
+            echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
+            if [ -z "$INPUT_VER" ] || [ "$INPUT_VER" == "latest" ]; then
+              echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
+            else
+              echo "OWRT_VERSION=$INPUT_VER" >> $GITHUB_ENV
+            fi
           else
-            echo "FINAL_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
+            if [ "$OFFICIAL_LATEST" != "$MY_LATEST" ]; then
+              echo "🚀 状态: 已更新发布 ($MY_LATEST -> $OFFICIAL_LATEST)"
+              echo "**🚀 运行状态:** 发现新版本 (\`$MY_LATEST\` ➔ \`$OFFICIAL_LATEST\`)，已启动更新编译！" >> $GITHUB_STEP_SUMMARY
+              echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
+              echo "OWRT_VERSION=$OFFICIAL_LATEST" >> $GITHUB_ENV
+            else
+              echo "✅ 状态: 版本一致，无需更新。任务终止。"
+              echo "**✅ 运行状态:** 版本一致，无需更新。任务自动终止。" >> $GITHUB_STEP_SUMMARY
+              echo "SHOULD_BUILD=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
-      - name: Build ImmortalWrt-x86-64-efi
+      - name: 安装编译依赖
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: |
-          docker run --rm -i \
-            --user root \
-            -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
-            -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
-            -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
-            -v "${{ github.workspace }}/x86-64/auto-build-script.sh:/home/build/immortalwrt/build.sh" \
-            -e CUSTOM_IP="$INPUT_IP" \
-            -e ROOTFS_SIZE="$INPUT_ROOTFS" \
-            -e INCLUDE_DOCKER="$INPUT_DOCKER" \
-            -e APP_HOMEPROXY="$INPUT_APP_HOMEPROXY" \
-            -e APP_OPENCLASH="$INPUT_APP_OPENCLASH" \
-            -e APP_PASSWALL="$INPUT_APP_PASSWALL" \
-            -e APP_KSMBD="$INPUT_APP_KSMBD" \
-            -e THEME_ARGON="$INPUT_THEME_ARGON" \
-            -e APP_ADGUARDHOME="$INPUT_APP_ADGUARDHOME" \
-            -e APP_ALIST="$INPUT_APP_ALIST" \
-            -e APP_QBITTORRENT="$INPUT_APP_QBITTORRENT" \
-            -e APP_MWAN3="$INPUT_APP_MWAN3" \
-            -e APP_VLMCSD="$INPUT_APP_VLMCSD" \
-            -e APP_STATISTICS="$INPUT_APP_STATISTICS" \
-            -e APP_SQM="$INPUT_APP_SQM" \
-            -e APP_WIREGUARD="$INPUT_APP_WIREGUARD" \
-            -e APP_TAILSCALE="$INPUT_APP_TAILSCALE" \
-            -e APP_ZEROTIER="$INPUT_APP_ZEROTIER" \
-            -e APP_FRPC="$INPUT_APP_FRPC" \
-            -e KMOD_IGC="$INPUT_KMOD_IGC" \
-            -e KMOD_IXGBE="$INPUT_KMOD_IXGBE" \
-            -e KMOD_E1000E="$INPUT_KMOD_E1000E" \
-            -e KMOD_R8169="$INPUT_KMOD_R8169" \
-            -e KMOD_R8125="$INPUT_KMOD_R8125" \
-            immortalwrt/imagebuilder:x86-64-openwrt-${{ env.FINAL_VERSION }} /bin/bash /home/build/immortalwrt/build.sh
-          
-      - name: Generate Smart Release Notes
-        run: |
-          cat > ${{ github.workspace }}/router-info.md <<EOF
-          ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} 终极动态架构版
-          
-          ## 📡 网络后台
-          - 🏠 **管理地址**: \`$INPUT_IP\`
-          - 👤 **默认账户**: \`root\`
-          - 🔑 **默认密码**: *(无，请在初始设置时修改)*
-          
-          > 💡 **架构黑科技 (云端极速打包 + 本地智能分离扩容)**: 
-          > 本次编译强制云端极速打包为 \`512MB\`，下载与刷写速度极快。刷入物理机**首次开机时**，底层脚本将自动执行以下操作：
-          > 1. 将内核定死为 \`64MB\` (保障日后刷机界限不偏移)。
-          > 2. 将主系统盘 (sda2) 无损拉伸扩容至您指定的 \`${INPUT_ROOTFS}MB\`。
-          > 3. 将剩余的所有硬盘空间划分为数据盘 (sda3) 并利用 UUID 强绑定挂载至 \`/opt\`。**后续无论怎么重刷系统，/opt 中的 Docker 与缓存数据都不会丢失！**
-          EOF
+          sudo apt-get update
+          sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip bzip2 patch python3 findutils zstd
 
-      - name: Upload ImmortWrt as release assets
-        uses: softprops/action-gh-release@v2.4.1
+      - name: 下载并解压 ImageBuilder
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        run: |
+          wget -q https://downloads.openwrt.org/releases/${{ env.OWRT_VERSION }}/targets/x86/64/openwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64.tar.zst
+          tar -I zstd -xf openwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64.tar.zst
+          mv openwrt-imagebuilder-${{ env.OWRT_VERSION }}-x86-64.Linux-x86_64 imagebuilder
+
+      - name: 运行编译脚本
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        run: |
+          # 🌟 核心防护：抹除 Windows 换行符
+          sed -i 's/\r$//' Auto-OpenWrt-build-x86-64.sh
+          
+          chmod +x Auto-OpenWrt-build-x86-64.sh
+          cp Auto-OpenWrt-build-x86-64.sh imagebuilder/
+          cd imagebuilder
+          
+          # 双重防护
+          sed -i 's/\r$//' Auto-OpenWrt-build-x86-64.sh
+          
+          ./Auto-OpenWrt-build-x86-64.sh
+
+      - name: 生成发布时间变量
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        run: echo "BUILD_TIME=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
+
+      - name: 📏 获取固件实际大小
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        run: |
+          # 查找生成的 img 或 img.gz 文件，取体积最大的那个计算大小
+          FIRMWARE_SIZE=$(find imagebuilder/output-firmware/ -type f \( -name "*.img" -o -name "*.img.gz" \) -exec du -sh {} + | sort -hr | head -n 1 | awk '{print $1}')
+          
+          # 兜底逻辑：如果没匹配到特定后缀，就计算整个输出文件夹的总大小
+          if [ -z "$FIRMWARE_SIZE" ]; then
+            FIRMWARE_SIZE=$(du -sh imagebuilder/output-firmware/ | awk '{print $1}')
+          fi
+          
+          echo "FIRMWARE_SIZE=$FIRMWARE_SIZE" >> $GITHUB_ENV
+          echo "检测到固件实际大小为: $FIRMWARE_SIZE"
+          
+          # 追加编译成功信息到摘要面板
+          echo "### 🎉 编译成功" >> $GITHUB_STEP_SUMMARY
+          echo "- **固件体积:** \`${FIRMWARE_SIZE}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **下载地址:** [👉 点击此处前往 Releases 页面下载固件](https://github.com/${{ github.repository }}/releases/tag/OpenWrt-Latest)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+
+
+      - name: 🗑️ 清理旧的同名 Release
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        run: |
+          gh release delete OpenWrt-Latest -y --cleanup-tag || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🚀 自动发布到 Releases
+        if: steps.check_version.outputs.SHOULD_BUILD == 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: Build-${{ env.DATE }}
-          name: ImmortalWrt ${{ env.FINAL_VERSION }} 终极架构 (${{ github.event.inputs.custom_router_ip }})
-          body_path: ${{ github.workspace }}/router-info.md
-          files: |
-            ${{ github.workspace }}/bin/targets/x86/64/*-ext4-combined-efi.img.gz
-            ${{ github.workspace }}/bin/targets/x86/64/*-squashfs-combined-efi.img.gz
-            ${{ github.workspace }}/bin/targets/x86/64/*sha256sums
-          token: ${{ secrets.GITHUB_TOKEN }}
-          make_latest: true
+          tag_name: OpenWrt-Latest
+          name: OpenWrt ${{ env.OWRT_VERSION }} 每日检测-有新版本则自动更新
+          files: imagebuilder/output-firmware/*
+          body: |
+            **🤖 OpenWrt 最新定制化固件自动更新**
+            - **构建时间**: `${{ env.BUILD_TIME }}`
+            - **版    本**: `${{ env.OWRT_VERSION }}`
+            - **管 理 IP**: `${{ env.MANAGEMENT_IP }}`
+            - **核    心**: 已内置 OpenClash Meta 核心与 Argon 主题
+            - **分区配置**: Kernel: `64MB` | RootFS: `${{ env.ROOTFS_SIZE }}MB`
+            - **硬盘挂载**: 智能抓取 sda3 或 nvme0n1p3 动态绑定
+            - **固件体积**: `${{ env.FIRMWARE_SIZE }}`
