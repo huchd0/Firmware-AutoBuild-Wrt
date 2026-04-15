@@ -1,6 +1,6 @@
 # [🔍 OP Arch & Profile Radar (设备号智能寻址雷达)](https://github.com/huchd0/openwrt-x86-64-build/actions/workflows/op_arch_profile_radar.yml)
 
-> **💡 提示**：在 OpenWrt/ImmortalWrt 编译时，**错误的固件** 选错会导致无法刷入或固件无法运行（变砖）。请务必先核对芯片型号对应的“架构(Arch)”和“设备代号(Profile)”再用[**  🚀 ImmortalWrt-Embedded-Custom (非x86设备定制固件)  **](https://github.com/huchd0/openwrt-x86-64-build/actions/workflows/Embedded-Custom-ImmortalWrt.yml) 生产出硬路由器（比如红米、华硕、中兴、NanoPi...的硬路由）的正确固件！
+> **💡 提示**：在 OpenWrt/ImmortalWrt 编译时，**错误的固件** 选错会导致无法刷入或固件无法运行（变砖）。请务必先核对芯片型号对应的“架构(Arch)”和“设备代号(Profile)”再用[**  🚀 ImmortalWrt-Embedded-Custom (非x86设备定制固件)  **](https://github.com/huchd0/openwrt-x86-64-build/blob/master/.github/ImmortalWrt-Embedded-Custom-README.md)  生产出硬路由器（比如红米、华硕、中兴、NanoPi...的硬路由）的正确固件！
 
 ## 📖 项目简介
 在编译 OpenWrt/ImmortalWrt 时，寻找晦涩的“架构(Arch)”和“设备代号(Profile)”是最大的痛点。本工具是一套部署在 GitHub Actions 上的 **自动化寻址雷达**。你只需输入中文绰号，它就能穿透全网数据库，精准锁定底层代码！
