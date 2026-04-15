@@ -1,0 +1,209 @@
+name: build-immortalwrt-x86-64-Docker-Deluxe
+
+on:
+  workflow_dispatch:
+    inputs:
+      luci_version:
+        description: "选择 ImmortalWrt 版本 (Auto 抓取最新稳定版/RC版)"
+        required: false
+        default: "Auto"
+        type: choice
+        options:
+          - 'Auto'
+          - '24.10.5'
+          - '25.12.0-rc1'
+      custom_router_ip:
+        description: "设置路由器管理地址 (默认: 192.168.100.1)"
+        required: true
+        default: "192.168.100.1"
+      rootfs_size:
+        description: '编译固件 RootFS 分区大小 (单位: MB，建议 1024 以上)'
+        required: true
+        default: '1024'
+      include_docker:
+        description: "集成 Docker 及网络互通环境"
+        required: true
+        default: 'yes'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+      pppoe_account:
+        description: "PPPOE 宽带账号 (可选)"
+        required: false
+      pppoe_password:
+        description: "宽带密码 (留空则默认为 DHCP 上网)"
+        required: false
+      
+      # ====== 新增：可选插件复选框 (boolean 类型) ======
+      app_openclash:
+        description: "🔌 集成 luci-app-openclash (科学插件)"
+        type: boolean
+        default: true
+      app_upnp:
+        description: "🎮 集成 luci-app-upnp (UPnP自动端口映射)"
+        type: boolean
+        default: true
+      app_ddns:
+        description: "🌐 集成 luci-app-ddns (动态域名解析)"
+        type: boolean
+        default: false
+      app_wol:
+        description: "💻 集成 luci-app-wol (网络唤醒)"
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # 全局映射 Action 输入为环境变量
+      INPUT_VERSION: ${{ inputs.luci_version }}
+      INPUT_IP: ${{ inputs.custom_router_ip }}
+      INPUT_ROOTFS: ${{ inputs.rootfs_size }}
+      INPUT_DOCKER: ${{ inputs.include_docker }}
+      INPUT_PPPOE_ACC: ${{ inputs.pppoe_account }}
+      INPUT_PPPOE_PWD: ${{ inputs.pppoe_password }}
+      
+      # 将布尔值传递给环境变量 (选了是 'true'，没选是 'false')
+      INPUT_APP_OPENCLASH: ${{ inputs.app_openclash }}
+      INPUT_APP_UPNP: ${{ inputs.app_upnp }}
+      INPUT_APP_DDNS: ${{ inputs.app_ddns }}
+      INPUT_APP_WOL: ${{ inputs.app_wol }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+
+      - name: Set executable permissions
+        run: |
+          sed -i 's/\r$//' ${{ github.workspace }}/x86-64/immortalwrt-build-x86-64-Deluxe.sh
+          chmod +x ${{ github.workspace }}/x86-64/immortalwrt-build-x86-64-Deluxe.sh
+
+      - name: Generate build timestamp
+        id: date
+        run: echo "DATE=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+
+      - name: 🔍 解析 Auto 版本号
+        id: resolve_version
+        run: |
+          if [ "$INPUT_VERSION" == "Auto" ]; then
+            echo ">>> 正在自动抓取 Docker Hub 上最新的 ImmortalWrt 镜像标签..."
+            LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
+            
+            if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
+              echo "❌ 致命错误：未能从 Docker Hub 获取到有效的版本号！工作流中止。"
+              exit 1
+            fi
+            
+            echo ">>> 🎉 成功锁定最终构建版本: $LATEST_TAG"
+            echo "FINAL_VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          else
+            echo ">>> 用户手动指定了版本: $INPUT_VERSION"
+            echo "FINAL_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
+          fi
+
+      - name: Save Custom Router IP into OpenWrt files
+        run: |
+          mkdir -p "${{ github.workspace }}/files/etc/config"
+          echo "$INPUT_IP" > "${{ github.workspace }}/files/etc/config/custom_router_ip.txt"
+          echo "✅ 管理地址文件已生成: $INPUT_IP"
+      
+      - name: Check PPPoE Inputs (Graceful Fallback)
+        run: |
+          if [[ -n "$INPUT_PPPOE_ACC" && -n "$INPUT_PPPOE_PWD" ]]; then
+            echo "✅ 检测到完整的宽带账号和密码，将启用 PPPoE 自动拨号。"
+          elif [[ -n "$INPUT_PPPOE_ACC" || -n "$INPUT_PPPOE_PWD" ]]; then
+            echo "⚠️ 提示: 宽带账号或密码未填全。系统将安全回退至 DHCP 模式。"
+          else
+            echo "✅ 未检测到宽带配置，将默认使用 DHCP。"
+          fi
+
+      - name: Build ImmortalWrt-x86-64-efi
+        run: |
+          echo "🚀 开始基于 ${{ env.FINAL_VERSION }} 构建，RootFS 大小: ${INPUT_ROOTFS}MB"
+          
+          # 将插件的变量通过 -e 注入进 Docker 环境中
+          docker run --rm -i \
+            --user root \
+            -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
+            -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
+            -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
+            -v "${{ github.workspace }}/x86-64/immortalwrt-build-x86-64-Deluxe.sh:/home/build/immortalwrt/build.sh" \
+            -e ROOTFS_SIZE="$INPUT_ROOTFS" \
+            -e INCLUDE_DOCKER="$INPUT_DOCKER" \
+            -e PPPOE_ACCOUNT="$INPUT_PPPOE_ACC" \
+            -e PPPOE_PASSWORD="$INPUT_PPPOE_PWD" \
+            -e APP_OPENCLASH="$INPUT_APP_OPENCLASH" \
+            -e APP_UPNP="$INPUT_APP_UPNP" \
+            -e APP_DDNS="$INPUT_APP_DDNS" \
+            -e APP_WOL="$INPUT_APP_WOL" \
+            immortalwrt/imagebuilder:x86-64-openwrt-${{ env.FINAL_VERSION }} /bin/bash /home/build/immortalwrt/build.sh
+          
+      - name: Generate Smart Release Notes
+        run: |
+          DOCKER_STATUS="❎ 未集成"
+          DOCKER_NOTE="*(未启用 Docker 自动化配置)*"
+          
+          if [ "$INPUT_DOCKER" == "yes" ]; then
+            DOCKER_STATUS="✅ 已集成 (**包含全自动网络互通与防火墙转发规则**)"
+            DOCKER_NOTE="自动注册 Docker 虚拟网卡，并在防火墙中打通 LAN与Docker 的双向访问、允许 Docker 容器直连外网拉取镜像。"
+          fi
+
+          WAN_STATUS="🔌 DHCP / 静态 IP"
+          PPPOE_NOTE="*(未启用自动拨号功能)*"
+          
+          if [[ -n "$INPUT_PPPOE_ACC" && -n "$INPUT_PPPOE_PWD" ]]; then
+            WAN_STATUS="📝 PPPoE (**开机全自动注入账号密码并拨号**)"
+            PPPOE_NOTE="自动将你填写的宽带账号密码写入 WAN 口并拨号。"
+          elif [[ -n "$INPUT_PPPOE_ACC" || -n "$INPUT_PPPOE_PWD" ]]; then
+            WAN_STATUS="🔌 DHCP / 静态 IP (**⚠️ 宽带配置不全，已放弃 PPPoE**)"
+            PPPOE_NOTE="*(检测到不完整的宽带信息，防呆机制触发，已安全回退至 DHCP 模式)*"
+          fi
+
+          # 生成已选插件列表，用于 Release 展示
+          PLUGINS_INSTALLED=""
+          [ "$INPUT_APP_OPENCLASH" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-openclash\`\n"
+          [ "$INPUT_APP_UPNP" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-upnp\`\n"
+          [ "$INPUT_APP_DDNS" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-ddns\`\n"
+          [ "$INPUT_APP_WOL" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-wol\`\n"
+          [ -z "$PLUGINS_INSTALLED" ] && PLUGINS_INSTALLED="- *(未选择额外插件)*"
+
+          cat > ${{ github.workspace }}/router-info.md <<EOF
+          ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} 高级定制固件-Deluxe
+          
+          > 本固件由 GitHub Actions 驱动 \`ImageBuilder\` 全自动构建，专为 x86-64 物理机与虚拟机优化。
+          
+          ## 📡 路由器后台与网络
+          - 🏠 **管理地址**: \`$INPUT_IP\`
+          - 👤 **默认账户**: \`root\`
+          - 🔑 **默认密码**: *(无，请在初始设置时修改)*
+          - 🌐 **上网方式**: $WAN_STATUS
+          
+          ## ⚙️ 核心固件特性
+          - 🔒 **内核分区**: \`64 MB\` *(底层锁定，保障跨版本互刷不掉盘)*
+          - 💾 **RootFS 分区**: \`${INPUT_ROOTFS} MB\`
+          - 🐳 **Docker 环境**: $DOCKER_STATUS
+          
+          ## 🧩 已集成插件
+          $PLUGINS_INSTALLED
+          
+          ## 💡 开机自动化说明 (无痕部署)
+          本固件内置了启动脚本，**首次开机时会自动执行以下操作，并在执行完毕后自我销毁**，保持系统纯净：
+          1. 自动绑定指定的 LAN 口 IP。
+          2. $PPPOE_NOTE
+          3. $DOCKER_NOTE
+          EOF
+
+      - name: Upload ImmortWrt as release assets
+        uses: softprops/action-gh-release@v2.4.1
+        with:
+          tag_name: Build-${{ env.DATE }}
+          name: ImmortalWrt ${{ env.FINAL_VERSION }}-Deluxe (${{ inputs.custom_router_ip }})
+          body_path: ${{ github.workspace }}/router-info.md
+          files: |
+            ${{ github.workspace }}/bin/targets/x86/64/*-Deluxe.img.gz
+            ${{ github.workspace }}/bin/targets/x86/64/*sha256sums
+          token: ${{ secrets.GITHUB_TOKEN }}
+          make_latest: true
