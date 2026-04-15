@@ -194,7 +194,7 @@ mkdir -p bin/targets/salvaged
 cp /tmp/salvage/*.bin bin/targets/salvaged/ 2>/dev/null || true
 
 # ==========================================
-# 🛡️ 8. 物理体积二次核验
+# 🛡️ 8. 物理体积二次核验与智能排错建议
 # ==========================================
 FIRMWARE_FILE=$(find bin/targets -name "*.bin" | head -n 1)
 
@@ -204,12 +204,42 @@ if [ -f "$FIRMWARE_FILE" ]; then
     
     if [ "$FILE_SIZE" -gt 16128 ]; then # 15.75MB 安全线
         echo "❌ 致命错误：固件体积 (${FILE_SIZE}KB) 超过了 16MB 物理闪存上限！"
+        
+        # 💡 核心亮点：直接把诊断和建议打印到 GitHub 首页面板
+        {
+            echo "### ❌ 编译终止：固件体积严重超标！"
+            echo "当前生成的固件体积为 **${FILE_SIZE} KB**，远远超过了该设备物理闪存的安全上限 (约 15.7 MB)。"
+            echo ""
+            echo "#### 💡 诊断与修复建议："
+            echo "由于您当前选择了 \`${BUILD_MODE}\` 模式，系统试图将 OpenClash 及其庞大的 Meta 内核强行塞入路由器，导致空间溢出。"
+            echo "请**重新点击 Run workflow**，并在弹出的选项菜单中进行以下调整："
+            echo ""
+            echo "1. 💽 **切换为 Extroot (智能U盘扩容) 模式** 👉 **【强烈推荐】**"
+            echo "   *此模式下，生成的固件极小，绝对能顺利刷入。刷入后只需在路由器上插个 U 盘，系统会自动把 U 盘变成内置空间，并自动联网下载安装全套豪华插件！*"
+            echo "2. 🗑️ **切换为 Lite (丐版) 模式**"
+            echo "   *如果您没有多余的 U 盘，只想把路由器当普通千兆路由用，选此模式可剔除所有大型插件。*"
+        } >> $GITHUB_STEP_SUMMARY
+        
         exit 1
     else
         echo "✅ 校验通过：体积符合 16MB 物理规格，可安全刷入。"
+        
+        # 成功时也顺便打印个漂亮的成功面板
+        {
+            echo "### ✅ 编译打包成功！"
+            echo "固件体积：**${FILE_SIZE} KB** (状态：健康)"
+            echo "您可以直接在下方 Artifacts 下载刷机包。"
+        } >> $GITHUB_STEP_SUMMARY
     fi
 else
     echo "❌ 错误：未能在 bin 目录找到生成的固件。"
+    
+    # 针对其他编译失败的报错建议
+    {
+        echo "### ❌ 编译失败：未生成固件"
+        echo "ImageBuilder 引擎可能因为插件冲突或依赖缺失未能生成 bin 文件。请点开上方的 \`🏗️ 执行 Docker 构建引擎\` 步骤查看详细报错日志。"
+    } >> $GITHUB_STEP_SUMMARY
+    
     exit 1
 fi
 
