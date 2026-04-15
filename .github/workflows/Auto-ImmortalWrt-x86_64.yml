@@ -3,33 +3,29 @@ name: Auto-ImmortalWrt-x86_64-智能自动编译发布
 on:
   workflow_dispatch:
     inputs:
+      # ====== 基础设定 ======
       luci_version:
-        description: "选择 ImmortalWrt 版本 (Auto 抓取最新稳定版/RC版)"
+        description: "选择版本 (Auto 抓取最新稳定版/RC版)"
         required: false
         default: "Auto"
         type: choice
-        options:
-          - 'Auto'
-          - '24.10.5'
-          - '25.12.0-rc1'
+        options: [ 'Auto', '24.10.5', '25.12.0-rc1' ]
       custom_router_ip:
-        description: "设置路由器管理地址 (默认: 192.168.100.1)"
+        description: "设置管理地址"
         required: true
         default: "192.168.100.1"
       rootfs_size:
-        description: '编译固件 RootFS 分区大小 (单位: MB，建议 1024 以上)'
+        description: 'RootFS 分区大小 (MB)'
         required: true
         default: '1024'
       pppoe_account:
         description: "PPPOE 宽带账号 (可选)"
         required: false
       pppoe_password:
-        description: "宽带密码 (留空则默认为 DHCP 上网)"
+        description: "宽带密码 (留空则 DHCP)"
         required: false
         
-      # ==========================================
-      # ⬇️ 模块化功能开关 (按需加载，按需配置) ⬇️
-      # ==========================================
+      # ====== 核心网络与存储 (6) ======
       include_docker:
         description: "🐳 集成 Docker 引擎及网络互通"
         type: boolean
@@ -43,7 +39,7 @@ on:
         type: boolean
         default: false
       theme_argon:
-        description: "🎨 集成 Argon 主题及控制面板"
+        description: "🎨 集成 Argon 主题 (仅主题无控制面板)"
         type: boolean
         default: true
       app_ksmbd:
@@ -54,12 +50,64 @@ on:
         description: "📊 集成 Statistics (图形化状态监控)"
         type: boolean
         default: true
+
+      # ====== 常用扩展工具 (7) ======
       app_autoreboot:
         description: "⏱️ 集成 AutoReboot (定时重启)"
         type: boolean
         default: true
-      kmod_nics:
-        description: "🔌 集成全套网卡驱动 (igc/ixgbe/r8169等)"
+      app_upnp:
+        description: "🎮 集成 UPnP (自动端口映射)"
+        type: boolean
+        default: false
+      app_ttyd:
+        description: "📟 集成 TTYD (Web 终端控制台)"
+        type: boolean
+        default: true
+      app_wireguard:
+        description: "🛡️ 集成 WireGuard (轻量级 VPN)"
+        type: boolean
+        default: false
+      app_tailscale:
+        description: "🕸️ 集成 Tailscale (异地 Mesh 组网)"
+        type: boolean
+        default: false
+      app_sqm:
+        description: "🚦 集成 SQM QoS (防网络拥塞/游戏稳Ping)"
+        type: boolean
+        default: false
+      app_vlmcsd:
+        description: "🔑 集成 KMS (Windows/Office 激活服务)"
+        type: boolean
+        default: false
+
+      # ====== 独立网卡驱动 (7) ======
+      kmod_igc:
+        description: "🔌 驱动: Intel i225/i226 (2.5G)"
+        type: boolean
+        default: true
+      kmod_ixgbe:
+        description: "🔌 驱动: Intel 10G (万兆)"
+        type: boolean
+        default: false
+      kmod_e1000e:
+        description: "🔌 驱动: Intel 千兆"
+        type: boolean
+        default: false
+      kmod_r8169:
+        description: "🔌 驱动: Realtek 瑞昱千兆"
+        type: boolean
+        default: false
+      kmod_r8125:
+        description: "🔌 驱动: Realtek 瑞昱 2.5G"
+        type: boolean
+        default: false
+      kmod_vmxnet3:
+        description: "🔌 驱动: VMware 虚拟网卡"
+        type: boolean
+        default: false
+      kmod_virtio:
+        description: "🔌 驱动: PVE/KVM 虚拟网卡"
         type: boolean
         default: true
 
@@ -74,7 +122,7 @@ jobs:
       INPUT_PPPOE_ACC: ${{ github.event.inputs.pppoe_account }}
       INPUT_PPPOE_PWD: ${{ github.event.inputs.pppoe_password }}
       
-      # 映射布尔值到环境变量
+      # 映射所有功能与网卡布尔值
       INPUT_DOCKER: ${{ github.event.inputs.include_docker }}
       INPUT_APP_HOMEPROXY: ${{ github.event.inputs.app_homeproxy }}
       INPUT_APP_OPENCLASH: ${{ github.event.inputs.app_openclash }}
@@ -82,7 +130,20 @@ jobs:
       INPUT_APP_KSMBD: ${{ github.event.inputs.app_ksmbd }}
       INPUT_APP_STATISTICS: ${{ github.event.inputs.app_statistics }}
       INPUT_APP_AUTOREBOOT: ${{ github.event.inputs.app_autoreboot }}
-      INPUT_KMOD_NICS: ${{ github.event.inputs.kmod_nics }}
+      INPUT_APP_UPNP: ${{ github.event.inputs.app_upnp }}
+      INPUT_APP_TTYD: ${{ github.event.inputs.app_ttyd }}
+      INPUT_APP_WIREGUARD: ${{ github.event.inputs.app_wireguard }}
+      INPUT_APP_TAILSCALE: ${{ github.event.inputs.app_tailscale }}
+      INPUT_APP_SQM: ${{ github.event.inputs.app_sqm }}
+      INPUT_APP_VLMCSD: ${{ github.event.inputs.app_vlmcsd }}
+      
+      INPUT_KMOD_IGC: ${{ github.event.inputs.kmod_igc }}
+      INPUT_KMOD_IXGBE: ${{ github.event.inputs.kmod_ixgbe }}
+      INPUT_KMOD_E1000E: ${{ github.event.inputs.kmod_e1000e }}
+      INPUT_KMOD_R8169: ${{ github.event.inputs.kmod_r8169 }}
+      INPUT_KMOD_R8125: ${{ github.event.inputs.kmod_r8125 }}
+      INPUT_KMOD_VMXNET3: ${{ github.event.inputs.kmod_vmxnet3 }}
+      INPUT_KMOD_VIRTIO: ${{ github.event.inputs.kmod_virtio }}
       
     steps:
       - name: Checkout code
@@ -101,25 +162,14 @@ jobs:
         id: resolve_version
         run: |
           if [ "$INPUT_VERSION" == "Auto" ]; then
-            echo ">>> 正在自动抓取 Docker Hub 上最新的 ImmortalWrt 镜像标签..."
             LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
-            
-            if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
-              echo "❌ 致命错误：未能从 Docker Hub 获取到有效的版本号！工作流中止。"
-              exit 1
-            fi
-            
-            echo ">>> 🎉 成功锁定最终构建版本: $LATEST_TAG"
             echo "FINAL_VERSION=$LATEST_TAG" >> $GITHUB_ENV
           else
-            echo ">>> 用户手动指定了版本: $INPUT_VERSION"
             echo "FINAL_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
           fi
 
       - name: Build ImmortalWrt-x86-64-efi
         run: |
-          echo "🚀 开始基于 ${{ env.FINAL_VERSION }} 构建，RootFS 大小: ${INPUT_ROOTFS}MB"
-          
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
@@ -137,21 +187,23 @@ jobs:
             -e APP_KSMBD="$INPUT_APP_KSMBD" \
             -e APP_STATISTICS="$INPUT_APP_STATISTICS" \
             -e APP_AUTOREBOOT="$INPUT_APP_AUTOREBOOT" \
-            -e KMOD_NICS="$INPUT_KMOD_NICS" \
+            -e APP_UPNP="$INPUT_APP_UPNP" \
+            -e APP_TTYD="$INPUT_APP_TTYD" \
+            -e APP_WIREGUARD="$INPUT_APP_WIREGUARD" \
+            -e APP_TAILSCALE="$INPUT_APP_TAILSCALE" \
+            -e APP_SQM="$INPUT_APP_SQM" \
+            -e APP_VLMCSD="$INPUT_APP_VLMCSD" \
+            -e KMOD_IGC="$INPUT_KMOD_IGC" \
+            -e KMOD_IXGBE="$INPUT_KMOD_IXGBE" \
+            -e KMOD_E1000E="$INPUT_KMOD_E1000E" \
+            -e KMOD_R8169="$INPUT_KMOD_R8169" \
+            -e KMOD_R8125="$INPUT_KMOD_R8125" \
+            -e KMOD_VMXNET3="$INPUT_KMOD_VMXNET3" \
+            -e KMOD_VIRTIO="$INPUT_KMOD_VIRTIO" \
             immortalwrt/imagebuilder:x86-64-openwrt-${{ env.FINAL_VERSION }} /bin/bash /home/build/immortalwrt/build.sh
           
       - name: Generate Smart Release Notes
         run: |
-          # 动态拼接已安装组件列表
-          PLUGINS_INSTALLED=""
-          [ "$INPUT_APP_HOMEPROXY" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-homeproxy\` (全能代理)\n"
-          [ "$INPUT_APP_OPENCLASH" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-openclash\` (科学内核)\n"
-          [ "$INPUT_THEME_ARGON" == "true" ] && PLUGINS_INSTALLED+="- \`luci-theme-argon\` (专属美化主题)\n"
-          [ "$INPUT_APP_KSMBD" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-ksmbd\` (极速内网共享)\n"
-          [ "$INPUT_APP_STATISTICS" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-statistics\` (图表状态监控)\n"
-          [ "$INPUT_APP_AUTOREBOOT" == "true" ] && PLUGINS_INSTALLED+="- \`luci-app-autoreboot\` (定时重启防护)\n"
-          [ "$INPUT_KMOD_NICS" == "true" ] && PLUGINS_INSTALLED+="- \`kmod-*虚拟与实体网卡驱动集\` (igc/ixgbe/e1000e等)\n"
-
           cat > ${{ github.workspace }}/router-info.md <<EOF
           ## 🚀 ImmortalWrt ${{ env.FINAL_VERSION }} 智能定制固件
           
@@ -160,10 +212,7 @@ jobs:
           - 👤 **默认账户**: \`root\`
           - 🔑 **默认密码**: *(无，请在初始设置时修改)*
           
-          ## 🧩 已集成的自选组件与预设
-          $PLUGINS_INSTALLED
-          
-          > 💡 **智能无痕部署**: 本固件内置了自动初始化脚本，上述选中的插件已在开机时自动注入了对应的设置（如语言包、默认配置等），首次开机生效后部署脚本会自我销毁，保障系统纯净。
+          > 💡 **智能无痕部署**: 本次构建按照勾选参数组装，相关的语言包、防呆回退机制、以及专属设置均已被自动注入首次开机脚本中，开机执行完毕后将自动销毁。
           EOF
 
       - name: Upload ImmortWrt as release assets
