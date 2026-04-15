@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================
-# 0. 云端预处理：预下载 OpenClash 核心
+# 0. 云端预处理：预下载 OpenClash 核心 (增强容错处理)
 # =========================================================
 mkdir -p files/etc/openclash/core
 if [ "$APP_OPENCLASH" = "true" ]; then
@@ -24,14 +24,14 @@ DYNAMIC_SCRIPT="files/etc/uci-defaults/99-dynamic-settings"
 echo "#!/bin/sh" > $DYNAMIC_SCRIPT
 
 BASE_PACKAGES=""
-# 磁盘与备份核心 (包含 partprobe 强制同步)
+# 磁盘与备份核心 (移除了不存在的 partprobe)
 BASE_PACKAGES="$BASE_PACKAGES base-files block-mount default-settings-chn luci-i18n-base-zh-cn"
-BASE_PACKAGES="$BASE_PACKAGES sgdisk parted e2fsprogs fdisk lsblk blkid tar partprobe"
+BASE_PACKAGES="$BASE_PACKAGES sgdisk parted e2fsprogs fdisk lsblk blkid tar"
 # 基础中文支持与包管理器
 BASE_PACKAGES="$BASE_PACKAGES luci-i18n-package-manager-zh-cn"
 
 # =========================================================
-# 🌟 智能接口分配、安全扩容、数据防毁挂载
+# 🌟 核心魔法：智能接口分配、安全扩容、数据防毁挂载
 # =========================================================
 cat >> $DYNAMIC_SCRIPT << EOF
 # --- A. 智能接口分配 (容错机制：防止无网卡导致脚本崩溃) ---
@@ -72,14 +72,12 @@ if [ -n "\$ROOT_DISK" ]; then
     DISK_DEV="/dev/\$ROOT_DISK"
     echo "\$ROOT_DISK" | grep -q "nvme" && P2="\${DISK_DEV}p2" && P3="\${DISK_DEV}p3" || P2="\${DISK_DEV}2" && P3="\${DISK_DEV}3"
 
-    # 1. 修复 GPT 表并强制内核同步
+    # 1. 修复 GPT 表并利用 sync 强制内核同步
     sgdisk -e \$DISK_DEV
-    partprobe \$DISK_DEV
     sync && sleep 2
 
     # 2. 扩容系统盘 (尝试拉伸到指定大小，容错：避免超过物理边界报错)
     parted -s \$DISK_DEV resizepart 2 ${ROOTFS_SIZE}MiB || true
-    partprobe \$DISK_DEV
     sync && sleep 2
     
     # 3. 文件系统强行自检与在线拉伸 (极其重要的防炸盘机制)
