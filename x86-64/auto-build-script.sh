@@ -114,25 +114,35 @@ EOF
 [ "$INCLUDE_DOCKER" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-dockerman luci-i18n-dockerman-zh-cn docker-compose"
 
 # =========================================================
-# 4. 封装配置、锁死底层体积并执行编译
+# 4. 封装配置、锁死底层体积、砍掉无用格式并执行编译
 # =========================================================
 echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
 
-# 🎯 强行锁死云端出包体积，提升为 1024MB (1GB)，确保能装下 Docker 等庞然大物！
+# 🎯 锁死云端出包为 1024MB，装下海量插件
 if grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE" .config; then
     sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g" .config
 else
     echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
 fi
 
-# 🛡️ 强行锁死内核分区为 64MB，确保未来重刷固件时数据盘起点的物理扇区绝对不偏移
+# 🛡️ 锁死内核分区为 64MB，确保未来重刷数据盘不偏移
 if grep -q "CONFIG_TARGET_KERNEL_PARTSIZE" .config; then
     sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=64/g" .config
 else
     echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
 fi
+
+# ✂️ 极致精简输出：只保留 ext4，砍掉 squashfs 和所有虚拟机格式
+echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config      # 必须保留 ext4 (扩容魔法的基石)
+echo "CONFIG_TARGET_ROOTFS_SQUASHFS=n" >> .config    # 砍掉 squashfs
+echo "CONFIG_TARGET_ROOTFS_TARGZ=n" >> .config       # 砍掉 .tar.gz 备份包
+echo "CONFIG_VDI_IMAGES=n" >> .config                # 砍掉 VirtualBox 格式
+echo "CONFIG_VMDK_IMAGES=n" >> .config               # 砍掉 VMware 格式
+echo "CONFIG_VHDX_IMAGES=n" >> .config               # 砍掉 Hyper-V 格式
+echo "CONFIG_QCOW2_IMAGES=n" >> .config              # 砍掉 QEMU 格式
+echo "CONFIG_ISO_IMAGES=n" >> .config                # 砍掉 ISO 镜像
 
 echo ">>> 最终打包的软件列表: $BASE_PACKAGES"
 
