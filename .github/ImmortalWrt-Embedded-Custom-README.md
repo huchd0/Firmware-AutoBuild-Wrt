@@ -1,5 +1,4 @@
-##  [🚀 ImmortalWrt-Embedded-Custom (非x86设备定制固件)](https://github.com/huchd0/openwrt-x86-64-build/actions/workflows/Embedded-Custom-ImmortalWrt.yml) 
-##  [🔍 OP Arch & Profile Radar (设备号智能寻址雷达)](https://github.com/huchd0/openwrt-x86-64-build/actions/workflows/op_arch_profile_radar.yml)
+#  [🚀 ImmortalWrt-Embedded-Custom (非x86设备定制固件)](https://github.com/huchd0/openwrt-x86-64-build/actions/workflows/Embedded-Custom-ImmortalWrt.yml) 
 
 欢迎使用本系统！本套件专为嵌入式路由器（比如红米、华硕、中兴、NanoPi...的硬路由）设计。通过“寻址雷达”与“云端编译引擎”的强强联手，助你打破硬件枷锁，实现 U 盘无感扩容与插件自由。
 
