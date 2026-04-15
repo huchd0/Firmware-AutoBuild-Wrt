@@ -272,9 +272,8 @@ chmod +x files/etc/init.d/install-ttyd
 mkdir -p files/etc/rc.d
 ln -s ../init.d/install-ttyd files/etc/rc.d/S99install-ttyd
 
-
 # ==========================================
-# --- F. 优雅内置：全自动静默升级与定时任务 (双引擎自适应版) ---
+# --- F. 全自动静默升级与定时任务 (双引擎自适应版) ---
 # ==========================================
 echo "正在生成自动升级脚本与定时任务..."
 
@@ -305,18 +304,31 @@ echo "使用 $PKG_ENGINE 引擎执行升级..." >> "$LOGFILE"
 # 2. 根据引擎执行相应的安全升级逻辑
 if [ "$PKG_ENGINE" = "apk" ]; then
     apk update >> "$LOGFILE" 2>&1
-    apk upgrade >> "$LOGFILE" 2>&1
+    # 获取可升级列表，提取包名并过滤掉敏感的内核与底层包
+    apk list -u 2>/dev/null | awk '{print $1}' | sed -E 's/-[0-9]+.*//' | while read -r pkg; do
+        if [ -z "$pkg" ]; then continue; fi
+        case "$pkg" in
+            base-files|busybox|dnsmasq*|dropbear|firewall*|fstools|kernel|kmod-*|libc|luci|mtd|procd|uhttpd)
+                # 核心底层包，跳过
+                ;;
+            *)
+                echo "升级: $pkg" >> "$LOGFILE"
+                apk add -u "$pkg" >> "$LOGFILE" 2>&1
+                ;;
+        esac
+    done
     openclash_after=$(apk info -v luci-app-openclash 2>/dev/null)
     
 elif [ "$PKG_ENGINE" = "opkg" ]; then
     opkg update >> "$LOGFILE" 2>&1
     for pkg in $(opkg list-upgradable | awk '{print $1}'); do
-        case $pkg in
+        case "$pkg" in
             base-files|busybox|dnsmasq*|dropbear|firewall*|fstools|kernel|kmod-*|libc|luci|mtd|opkg|procd|uhttpd)
+                # 核心底层包，跳过
                 ;;
             *)
                 echo "升级: $pkg" >> "$LOGFILE"
-                opkg upgrade $pkg >> "$LOGFILE" 2>&1
+                opkg upgrade "$pkg" >> "$LOGFILE" 2>&1
                 ;;
         esac
     done
@@ -334,7 +346,14 @@ EOF_UPGRADE
 
 chmod +x files/usr/bin/upg
 mkdir -p files/etc/crontabs
-echo "0 2 */2 * * /usr/bin/upg" >> files/etc/crontabs/root
+
+# 写入定时任务 (注意结尾加换行，有些 crond 实现很挑剔)
+echo "0 2 */2 * * /usr/bin/upg" > files/etc/crontabs/root
+echo "" >> files/etc/crontabs/root
+
+# 🎯 赋予 crontab 正确的安全权限 (600)，否则计划任务会失效
+chmod 0600 files/etc/crontabs/root
+
 
 echo "=== 5. 配置 ImmortalWrt 专属软件列表 ==="
 
