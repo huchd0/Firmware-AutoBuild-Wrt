@@ -242,6 +242,7 @@ fi
 [ -d "bin/targets/salvaged" ] && cd bin/targets/salvaged || cd bin/targets/*/* 2>/dev/null || true
 for img in *.bin; do
     if [ -f "$img" ]; then
-        mv "$img" "${img%.*}-${TARGET_ARCH}.bin"
+        # 在原有固件名和架构名的基础上，追加当前编译模式 (Deluxe/Extroot/Lite)
+        mv "$img" "${img%.*}-${TARGET_ARCH}-${BUILD_MODE}.bin"
     fi
 done
