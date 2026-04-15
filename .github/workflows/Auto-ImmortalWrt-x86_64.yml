@@ -3,7 +3,7 @@ name: Auto-ImmortalWrt-x86_64-终极备份与扩容版
 on:
   workflow_dispatch:
     inputs:
-      # ====== 基础设定 ======
+      # ====== 基础设定 (3个) ======
       luci_version:
         description: "选择版本 (Auto 智能抓取)"
         required: false
@@ -19,51 +19,99 @@ on:
         required: true
         default: '10240'
         
-      # ====== 核心功能勾选 ======
+      # ====== 核心网络与存储 (5个) ======
       include_docker:
         description: "🐳 集成 Docker 引擎"
         type: boolean
         default: true
       app_homeproxy:
-        description: "🛡️ 集成 HomeProxy"
+        description: "🛡️ 集成 HomeProxy (全能代理)"
         type: boolean
         default: true
-      app_ksmbd:
-        description: "📁 集成 KSMBD (高速共享)"
-        type: boolean
-        default: true
-      theme_argon:
-        description: "🎨 集成 Argon 主题"
-        type: boolean
-        default: true
-
-      # ====== 扩展工具 (根据需要在 UI 勾选) ======
       app_openclash:
         description: "🔌 集成 OpenClash"
         type: boolean
         default: false
+      app_passwall:
+        description: "🚀 集成 PassWall"
+        type: boolean
+        default: false
+      app_ksmbd:
+        description: "📁 集成 KSMBD (局域网共享)"
+        type: boolean
+        default: true
+
+      # ====== 常用扩展工具 (12个) ======
+      theme_argon:
+        description: "🎨 集成 Argon 主题"
+        type: boolean
+        default: true
+      app_adguardhome:
+        description: "🛑 集成 AdGuardHome (去广告)"
+        type: boolean
+        default: false
       app_alist:
-        description: "🗂️ 集成 AList"
+        description: "🗂️ 集成 AList (网盘挂载)"
         type: boolean
         default: false
       app_qbittorrent:
-        description: "🧲 集成 qBittorrent"
+        description: "🧲 集成 qBittorrent (下载)"
+        type: boolean
+        default: false
+      app_mwan3:
+        description: "⚖️ 集成 MWAN3 (多拨/负载均衡)"
+        type: boolean
+        default: false
+      app_vlmcsd:
+        description: "🔑 集成 KMS (Win/Office激活)"
         type: boolean
         default: false
       app_statistics:
-        description: "📊 集成图形化监控"
+        description: "📊 集成 Statistics (状态监控)"
         type: boolean
         default: true
+      app_sqm:
+        description: "🚦 集成 SQM QoS (防网络拥塞)"
+        type: boolean
+        default: false
+      app_wireguard:
+        description: "🛡️ 集成 WireGuard"
+        type: boolean
+        default: false
       app_tailscale:
-        description: "🕸️ 集成 Tailscale"
+        description: "🕸️ 集成 Tailscale (异地组网)"
+        type: boolean
+        default: false
+      app_zerotier:
+        description: "🌍 集成 ZeroTier (虚拟局域网)"
+        type: boolean
+        default: false
+      app_frpc:
+        description: "🚇 集成 FRPC (内网穿透)"
         type: boolean
         default: false
 
-      # ====== 实体网卡驱动 (默认开启 Intel 2.5G) ======
+      # ====== 独立实体网卡驱动 (5个) ======
       kmod_igc:
-        description: "🔌 驱动: Intel i225/i226"
+        description: "🔌 驱动: Intel i225/i226 (2.5G)"
         type: boolean
         default: true
+      kmod_ixgbe:
+        description: "🔌 驱动: Intel 10G (万兆)"
+        type: boolean
+        default: false
+      kmod_e1000e:
+        description: "🔌 驱动: Intel 千兆"
+        type: boolean
+        default: false
+      kmod_r8169:
+        description: "🔌 驱动: Realtek 瑞昱千兆"
+        type: boolean
+        default: false
+      kmod_r8125:
+        description: "🔌 驱动: Realtek 瑞昱 2.5G"
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -74,17 +122,29 @@ jobs:
       INPUT_IP: ${{ github.event.inputs.custom_router_ip }}
       INPUT_ROOTFS: ${{ github.event.inputs.rootfs_size }}
       
-      # 映射变量
+      # 完整映射所有 20+ 个 UI 变量到脚本环境变量
       INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
       APP_HOMEPROXY: ${{ github.event.inputs.app_homeproxy }}
       APP_OPENCLASH: ${{ github.event.inputs.app_openclash }}
+      APP_PASSWALL: ${{ github.event.inputs.app_passwall }}
       APP_KSMBD: ${{ github.event.inputs.app_ksmbd }}
       THEME_ARGON: ${{ github.event.inputs.theme_argon }}
+      APP_ADGUARDHOME: ${{ github.event.inputs.app_adguardhome }}
       APP_ALIST: ${{ github.event.inputs.app_alist }}
       APP_QBITTORRENT: ${{ github.event.inputs.app_qbittorrent }}
+      APP_MWAN3: ${{ github.event.inputs.app_mwan3 }}
+      APP_VLMCSD: ${{ github.event.inputs.app_vlmcsd }}
       APP_STATISTICS: ${{ github.event.inputs.app_statistics }}
+      APP_SQM: ${{ github.event.inputs.app_sqm }}
+      APP_WIREGUARD: ${{ github.event.inputs.app_wireguard }}
       APP_TAILSCALE: ${{ github.event.inputs.app_tailscale }}
+      APP_ZEROTIER: ${{ github.event.inputs.app_zerotier }}
+      APP_FRPC: ${{ github.event.inputs.app_frpc }}
       KMOD_IGC: ${{ github.event.inputs.kmod_igc }}
+      KMOD_IXGBE: ${{ github.event.inputs.kmod_ixgbe }}
+      KMOD_E1000E: ${{ github.event.inputs.kmod_e1000e }}
+      KMOD_R8169: ${{ github.event.inputs.kmod_r8169 }}
+      KMOD_R8125: ${{ github.event.inputs.kmod_r8125 }}
       
     steps:
       - name: Checkout code
@@ -105,7 +165,7 @@ jobs:
             echo "FINAL_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
           fi
 
-      - name: 执行编译
+      - name: 执行编译 (载入全部变量)
         run: |
           docker run --rm -i \
             --user root \
@@ -116,13 +176,25 @@ jobs:
             -e INCLUDE_DOCKER="$INCLUDE_DOCKER" \
             -e APP_HOMEPROXY="$APP_HOMEPROXY" \
             -e APP_OPENCLASH="$APP_OPENCLASH" \
+            -e APP_PASSWALL="$APP_PASSWALL" \
             -e APP_KSMBD="$APP_KSMBD" \
             -e THEME_ARGON="$THEME_ARGON" \
+            -e APP_ADGUARDHOME="$APP_ADGUARDHOME" \
             -e APP_ALIST="$APP_ALIST" \
             -e APP_QBITTORRENT="$APP_QBITTORRENT" \
+            -e APP_MWAN3="$APP_MWAN3" \
+            -e APP_VLMCSD="$APP_VLMCSD" \
             -e APP_STATISTICS="$APP_STATISTICS" \
+            -e APP_SQM="$APP_SQM" \
+            -e APP_WIREGUARD="$APP_WIREGUARD" \
             -e APP_TAILSCALE="$APP_TAILSCALE" \
+            -e APP_ZEROTIER="$APP_ZEROTIER" \
+            -e APP_FRPC="$APP_FRPC" \
             -e KMOD_IGC="$KMOD_IGC" \
+            -e KMOD_IXGBE="$KMOD_IXGBE" \
+            -e KMOD_E1000E="$KMOD_E1000E" \
+            -e KMOD_R8169="$KMOD_R8169" \
+            -e KMOD_R8125="$KMOD_R8125" \
             immortalwrt/imagebuilder:x86-64-openwrt-${{ env.FINAL_VERSION }} /bin/bash /home/build/immortalwrt/build.sh
 
       - name: 发布固件到 Releases
