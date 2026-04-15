@@ -10,10 +10,10 @@ echo "#!/bin/sh" > $DYNAMIC_SCRIPT
 echo "uci set network.lan.ipaddr='$CUSTOM_IP'" >> $DYNAMIC_SCRIPT
 
 # =========================================================
-# 1. 隐式底层强化包 (包含磁盘工具与备份核心)
+# 1. 隐式底层强化包 (确保恢复工具与磁盘工具完整)
 # =========================================================
 BASE_PACKAGES=""
-# 🌟 系统核心与磁盘管理工具 (注意：此处使用的是正确的 lsblk)
+# 系统核心与磁盘管理工具
 BASE_PACKAGES="$BASE_PACKAGES base-files block-mount default-settings-chn luci-i18n-base-zh-cn"
 BASE_PACKAGES="$BASE_PACKAGES sgdisk parted e2fsprogs fdisk lsblk blkid tar"
 # 性能优化
@@ -26,41 +26,36 @@ BASE_PACKAGES="$BASE_PACKAGES luci-app-ramfree luci-i18n-ramfree-zh-cn"
 BASE_PACKAGES="$BASE_PACKAGES luci-app-autoreboot luci-i18n-autoreboot-zh-cn"
 
 # =========================================================
-# 🌟 开机拉伸、数据盘绑定、以及“原生备份”机制
+# 🌟 核心脚本：开机扩容、持久化绑定、原生备份与恢复命令
 # =========================================================
-# 提前计算 P3 的物理安全起点 (Kernel 64MB + 用户填写的 RootFS 目标容量)
+# 计算 P3 的物理安全起点 (Kernel 64MB + 用户填写的 RootFS 容量)
 START_P3=$(( 64 + ROOTFS_SIZE ))
 
 cat >> $DYNAMIC_SCRIPT << EOF
-# 1. 抓取物理主硬盘
+# 1. 硬盘检测 (适配 SATA 与 NVMe)
 ROOT_DISK=\$(lsblk -d -n -o NAME | grep -E 'sda|nvme[0-9]n[0-9]' | head -n 1)
 if [ -n "\$ROOT_DISK" ]; then
     DISK_DEV="/dev/\$ROOT_DISK"
-    # 适配 NVMe 和 SATA 分区命名差异
     echo "\$ROOT_DISK" | grep -q "nvme" && P2="\${DISK_DEV}p2" && P3="\${DISK_DEV}p3" || P2="\${DISK_DEV}2" && P3="\${DISK_DEV}3"
 
-    # 2. 只有在全新刷机(找不到 P3 数据盘)时，才执行全局初始化
+    # 2. 磁盘扩容逻辑
     if ! lsblk \$P3 >/dev/null 2>&1; then
         sgdisk -e \$DISK_DEV
-        
-        # 拉伸系统盘 (P2) 至用户指定大小
         parted -s \$DISK_DEV resizepart 2 ${START_P3}MiB
         sync && sleep 1
         resize2fs \$P2
-        
-        # 建立数据盘 (P3) 占满剩余所有空间
         parted -s \$DISK_DEV mkpart primary ext4 ${START_P3}MiB 100%
         sync && sleep 2
         mkfs.ext4 -F \$P3
     else
-        # 刷机更新模式(保留数据)：依然修复 GPT 并拉伸 P2，但绝对不格式化 P3！
+        # 刷机更新模式：拉伸 P2，但不格式化 P3
         sgdisk -e \$DISK_DEV
         parted -s \$DISK_DEV resizepart 2 ${START_P3}MiB
         sync && sleep 1
         resize2fs \$P2
     fi
 
-    # 3. UUID 稳健挂载到 /opt (防止硬盘插拔导致盘符错乱)
+    # 3. 稳定挂载与 UUID 绑定
     P3_UUID=\$(blkid -s UUID -o value \$P3)
     if [ -n "\$P3_UUID" ]; then
         uci -q delete fstab.opt_mount || true
@@ -72,25 +67,31 @@ if [ -n "\$ROOT_DISK" ]; then
         uci commit fstab
     fi
 
-    # 4. 🚀 建立“原生备份”与“一键恢复”指令
+    # 4. 建立备份与恢复命令 (填补 ext4 无恢复出厂的缺陷)
     mkdir -p /opt/backup /opt/docker /opt/alist /opt/downloads /opt/smb
     mount \$P3 /opt 2>/dev/null
     
-    # 建立备份：将开机第一刻最纯净的设定进行打包存档
+    # 自动备份当前最纯净的设定包
     sleep 3
-    tar -czf /opt/backup/factory_config.tar.gz /etc/config /etc/passwd /etc/shadow /etc/dropbear
+    [ ! -f /opt/backup/factory_config.tar.gz ] && tar -czf /opt/backup/factory_config.tar.gz /etc/config /etc/passwd /etc/shadow /etc/dropbear
     
-    # 写入系统全局恢复指令 (输入 restore-factory 即可调用)
+    # 注入恢复指令 /bin/restore-factory
     cat > /bin/restore-factory << 'INNER'
 #!/bin/sh
-echo "警告：即将恢复初始系统设定并重启！"
+echo "------------------------------------------------"
+echo "☢️  警告：即将执行系统恢复操作！"
+echo "------------------------------------------------"
 if [ -f /opt/backup/factory_config.tar.gz ]; then
+    echo "[1/3] 清理当前错误配置..."
     rm -rf /etc/config/*
+    echo "[2/3] 提取初始纯净配置..."
     tar -xzf /opt/backup/factory_config.tar.gz -C /
-    echo "恢复成功，正在重启系统..."
+    echo "[3/3] 恢复完成，正在重启系统..."
+    sleep 2
     reboot
 else
-    echo "错误：找不到备份文件，无法恢复！"
+    echo "❌ 错误：找不到备份文件 /opt/backup/factory_config.tar.gz"
+    echo "请确保您的数据盘 (sda3) 已正确挂载至 /opt 目录。"
 fi
 INNER
     chmod +x /bin/restore-factory
@@ -112,28 +113,18 @@ EOF
 [ "$INCLUDE_DOCKER" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-dockerman luci-i18n-dockerman-zh-cn docker-compose"
 
 # =========================================================
-# 4. 锁死物理参数、极致精简输出并执行编译
+# 4. 锁死物理参数与极致精简格式
 # =========================================================
 echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
 
-# 🛡️ 锁死 Kernel 为 64MB (确保未来重刷固件时数据盘起点的物理扇区绝对不偏移)
-if grep -q "CONFIG_TARGET_KERNEL_PARTSIZE" .config; then
-    sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=64/g" .config
-else
-    echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
-fi
+# 锁死分区参数 (内核 64MB，初始系统包 1024MB)
+sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
+sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=64/g" .config || echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
 
-# 🎯 锁死 RootFS 初始云端打包体积为 1024MB (装下海量插件，开机后再扩容)
-if grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE" .config; then
-    sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g" .config
-else
-    echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
-fi
-
-# ✂️ 极致精简输出：只保留 ext4，砍掉 squashfs 和所有无用的虚拟机格式！
-echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config      # 必须保留 ext4 (扩容魔法的基石)
+# ✂️ 极致精简输出：只保留 ext4，砍掉 squashfs 和所有虚拟机格式
+echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config      # 必须保留 ext4
 echo "CONFIG_TARGET_ROOTFS_SQUASHFS=n" >> .config    # 砍掉 squashfs
 echo "CONFIG_TARGET_ROOTFS_TARGZ=n" >> .config       # 砍掉 .tar.gz 备份包
 echo "CONFIG_VDI_IMAGES=n" >> .config                # 砍掉 VirtualBox 格式
@@ -141,7 +132,5 @@ echo "CONFIG_VMDK_IMAGES=n" >> .config               # 砍掉 VMware 格式
 echo "CONFIG_VHDX_IMAGES=n" >> .config               # 砍掉 Hyper-V 格式
 echo "CONFIG_QCOW2_IMAGES=n" >> .config              # 砍掉 QEMU 格式
 echo "CONFIG_ISO_IMAGES=n" >> .config                # 砍掉 ISO 镜像
-
-echo ">>> 最终打包的软件列表: $BASE_PACKAGES"
 
 make image PROFILE="generic" PACKAGES="$BASE_PACKAGES" FILES="files"
