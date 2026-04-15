@@ -74,7 +74,7 @@ jobs:
       INPUT_IP: ${{ github.event.inputs.custom_router_ip }}
       INPUT_ROOTFS: ${{ github.event.inputs.rootfs_size }}
       
-      # 将 UI 选项映射到脚本环境变量
+      # 映射变量
       INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
       APP_HOMEPROXY: ${{ github.event.inputs.app_homeproxy }}
       APP_OPENCLASH: ${{ github.event.inputs.app_openclash }}
@@ -105,7 +105,7 @@ jobs:
             echo "FINAL_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
           fi
 
-      - name: 执行容器编译 (调用脚本)
+      - name: 执行编译
         run: |
           docker run --rm -i \
             --user root \
@@ -129,12 +129,27 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: Build-${{ env.FINAL_VERSION }}
-          name: ImmortalWrt ${{ env.FINAL_VERSION }} 终极稳定版
+          name: ImmortalWrt ${{ env.FINAL_VERSION }} 实体机稳定版
           body: |
-            ### 🛠️ 固件高级特性
-            - **系统分区**: 锁定 `64MB` Kernel + 开机自动拉伸至 `${{ env.INPUT_ROOTFS }}MB` RootFS
-            - **数据持久化**: 剩余硬盘空间已通过 UUID 强绑定并挂载至 `/opt` (支持跨版本刷机保留数据)
-            - **纯净备份**: 初始网络配置已自动打包并隐藏备份至 `/opt/backup/factory_config.tar.gz`
-            - **极速恢复**: 若系统崩溃，只需在后台终端输入 `restore-factory` 即可秒级恢复出厂设置并重启！
+            ## 🚀 固件技术特性
+            * **底层架构**：采用 `ext4` 文件系统，支持全盘原生读写与在线扩容。
+            * **空间分配**：首次开机时，系统盘 (`sda2`) 会自动扩容至 **${{ env.INPUT_ROOTFS }}MB**；剩余物理硬盘空间将自动划分为 `sda3` 数据盘并挂载至 `/opt`，确保重刷固件时数据持久化。
+            
+            ## 📡 网络默认配置
+            * **管理地址**：`${{ env.INPUT_IP }}`
+            * **默认账户**：`root`
+            * **默认密码**：无 (初次进入请自行设置)
+
+            ## 🛠️ 系统恢复指引 (重要)
+            **由于本固件采用 `ext4` 全盘可写架构，系统后台原生的“恢复出厂设置”按钮不可用且无效。** 但我们已内置了专属的备份与恢复机制：
+            
+            开机初始化时，系统已自动将纯净的配置文件备份至 `/opt/backup/` 目录。当系统配置出错导致无法联网时，请按以下步骤操作：
+            1. **进入终端**：使用 SSH 或网页版 TTYD 终端登录路由器。
+            2. **执行恢复命令**：在命令行中输入以下命令并回车：
+               ```bash
+               restore-factory
+               ```
+            3. **恢复流程**：系统将自动清理当前错误配置，提取初始纯净配置进行覆盖，随后自动重启即可恢复正常。*(存放在 /opt 里的 Docker 或下载数据不会被清除)*
+
           files: ${{ github.workspace }}/bin/targets/x86/64/*.img.gz
           token: ${{ secrets.GITHUB_TOKEN }}
