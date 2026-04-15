@@ -1,4 +1,4 @@
-编译时用的是openwrt官方源（极速构建），运行阶段被替换成了中科大源（长期维护）
+# 编译时用的是openwrt官方源（极速构建），运行阶段被替换成了中科大源（长期维护）
 
 #### 不仅适用于 X86 机器，[**  🚀 ImmortalWrt-Embedded-Custom (非x86设备定制固件)  **](https://github.com/huchd0/openwrt-x86-64-build/blob/master/.github/ImmortalWrt-Embedded-Custom-README.md) 可以给非 x86 架构的路由器（比如红米、华硕、中兴、NanoPi...的硬路由）编译固件！
 
