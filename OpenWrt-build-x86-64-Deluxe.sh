@@ -208,7 +208,7 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     uci set luci_statistics.collectd.ReadThreads='2'
     uci set luci_statistics.collectd.enable='1'
     
-    # 🎯 你的神来之笔：利用假配置骗开图表假死管道
+    # 🎯 利用假配置骗开图表假死管道
     uci del luci_statistics.collectd_network.enable 2>/dev/null || true
     uci set luci_statistics.collectd_mqtt=statistics
 
@@ -267,6 +267,9 @@ chmod +x files/etc/uci-defaults/99-custom-setup
 # --- F. 全自动静默升级与定时任务 (双引擎自适应版) ---
 # ==========================================
 echo "正在生成自动升级脚本与定时任务..."
+
+# 🌟 创建目录
+mkdir -p files/usr/bin
 
 cat << 'EOF_UPGRADE' > files/usr/bin/upg
 #!/bin/sh
