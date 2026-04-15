@@ -25,11 +25,11 @@ on:
       # ⬇️ 模块化功能开关 (复选框区域，支持默认打勾) ⬇️
       # ==========================================
       include_docker:
-        description: "🐳 集成 Docker 引擎及网络互通环境"
+        description: "🐳 Docker"
         type: boolean
         default: true
       app_openclash:
-        description: "🔌 集成 OpenClash (科学上网内核与界面)"
+        description: "🔌 集成 OpenClash (科学上网)"
         type: boolean
         default: true
       app_passwall:
