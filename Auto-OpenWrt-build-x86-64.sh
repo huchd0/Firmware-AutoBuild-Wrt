@@ -131,6 +131,89 @@ exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-custom-setup
 
+# --- E. 全自动静默升级与定时任务 (双引擎自适应版) ---
+echo "正在生成自动升级脚本与定时任务..."
+
+# 🌟 创建目录
+mkdir -p files/usr/bin
+
+cat << 'EOF_UPGRADE' > files/usr/bin/upg
+#!/bin/sh
+LOGFILE="/root/upg.log"
+
+if [ -f "$LOGFILE" ] && [ $(wc -c < "$LOGFILE") -gt 1048576 ]; then
+    echo "日志过大，已清空重建" > "$LOGFILE"
+fi
+
+echo "===== Auto Upgrade Start: $(date) =====" >> "$LOGFILE"
+
+# 1. 嗅探当前环境
+if command -v apk >/dev/null 2>&1; then
+    PKG_ENGINE="apk"
+    openclash_before=$(apk info -v luci-app-openclash 2>/dev/null)
+elif command -v opkg >/dev/null 2>&1; then
+    PKG_ENGINE="opkg"
+    openclash_before=$(opkg list-installed luci-app-openclash 2>/dev/null)
+else
+    echo "未找到支持的包管理器！" >> "$LOGFILE"
+    exit 1
+fi
+
+echo "使用 $PKG_ENGINE 引擎执行升级..." >> "$LOGFILE"
+
+# 2. 根据引擎执行相应的安全升级逻辑
+if [ "$PKG_ENGINE" = "apk" ]; then
+    apk update >> "$LOGFILE" 2>&1
+    # 获取可升级列表，提取包名并过滤掉敏感的内核与底层包
+    apk list -u 2>/dev/null | awk '{print $1}' | sed -E 's/-[0-9]+.*//' | while read -r pkg; do
+        if [ -z "$pkg" ]; then continue; fi
+        case "$pkg" in
+            base-files|busybox|dnsmasq*|dropbear|firewall*|fstools|kernel|kmod-*|libc|luci|mtd|procd|uhttpd)
+                # 核心底层包，跳过
+                ;;
+            *)
+                echo "升级: $pkg" >> "$LOGFILE"
+                apk add -u "$pkg" >> "$LOGFILE" 2>&1
+                ;;
+        esac
+    done
+    openclash_after=$(apk info -v luci-app-openclash 2>/dev/null)
+    
+elif [ "$PKG_ENGINE" = "opkg" ]; then
+    opkg update >> "$LOGFILE" 2>&1
+    for pkg in $(opkg list-upgradable | awk '{print $1}'); do
+        case "$pkg" in
+            base-files|busybox|dnsmasq*|dropbear|firewall*|fstools|kernel|kmod-*|libc|luci|mtd|opkg|procd|uhttpd)
+                # 核心底层包，跳过
+                ;;
+            *)
+                echo "升级: $pkg" >> "$LOGFILE"
+                opkg upgrade "$pkg" >> "$LOGFILE" 2>&1
+                ;;
+        esac
+    done
+    openclash_after=$(opkg list-installed luci-app-openclash 2>/dev/null)
+fi
+
+# 3. OpenClash 守护重启逻辑
+if [ -n "$openclash_before" ] && [ "$openclash_before" != "$openclash_after" ]; then
+    echo "OpenClash 已升级 ($openclash_before -> $openclash_after)，正在重启服务..." >> "$LOGFILE"
+    /etc/init.d/openclash restart >> "$LOGFILE" 2>&1
+fi
+
+echo "===== Auto Upgrade End: $(date) =====" >> "$LOGFILE"
+EOF_UPGRADE
+
+chmod +x files/usr/bin/upg
+
+# 写入定时任务
+mkdir -p files/etc/crontabs
+echo "0 2 */2 * * /usr/bin/upg" > files/etc/crontabs/root
+echo "" >> files/etc/crontabs/root
+
+# 🎯 赋予 crontab 正确的安全权限 (600)，否则计划任务会失效
+chmod 0600 files/etc/crontabs/root
+
 echo ">>> 5. 配置官方软件列表 <<<"
 
 declare -a PKG_LIST=(
