@@ -96,8 +96,9 @@ if [ "$APP_WIREGUARD" = "true" ]; then
     # 注意：WireGuard 独立中文包已弃用，因此这里没有 i18n
     BASE_PACKAGES="$BASE_PACKAGES luci-proto-wireguard luci-app-wireguard"
 fi
+# 🕸️ Tailscale 异地组网
 if [ "$APP_TAILSCALE" = "true" ]; then
-    BASE_PACKAGES="$BASE_PACKAGES luci-app-tailscale luci-i18n-tailscale-zh-cn"
+    BASE_PACKAGES="$BASE_PACKAGES luci-app-tailscale"
 fi
 if [ "$APP_ZEROTIER" = "true" ]; then
     BASE_PACKAGES="$BASE_PACKAGES luci-app-zerotier luci-i18n-zerotier-zh-cn"
