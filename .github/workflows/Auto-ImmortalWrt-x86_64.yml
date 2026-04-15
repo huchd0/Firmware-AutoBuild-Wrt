@@ -223,5 +223,5 @@ jobs:
                ```
             3. **恢复流程**：系统将自动清理当前错误配置，提取初始纯净配置进行覆盖，随后自动重启即可恢复正常。*(存放在 /opt 里的 Docker 或下载数据不会被清除)*
 
-          files: ${{ github.workspace }}/bin/targets/x86/64/*.img.gz
+          files: ${{ github.workspace }}/bin/targets/x86/64/*-ext4-combined-efi.img.gz
           token: ${{ secrets.GITHUB_TOKEN }}
