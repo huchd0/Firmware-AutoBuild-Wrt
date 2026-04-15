@@ -138,8 +138,8 @@ jobs:
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
             -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
             -v "${{ github.workspace }}/.github/scripts/build_embedded.sh:/home/build/immortalwrt/build.sh" \
-            -v "$GITHUB_STEP_SUMMARY:/tmp/step_summary" \   # ➕ 将外部的摘要文件挂载进容器
-            -e GITHUB_STEP_SUMMARY="/tmp/step_summary" \    # ➕ 告诉容器内部摘要文件的路径
+            -v "$GITHUB_STEP_SUMMARY:/tmp/step_summary" \
+            -e GITHUB_STEP_SUMMARY="/tmp/step_summary" \
             -e MANAGEMENT_IP="${{ inputs.custom_router_ip }}" \
             -e TARGET_ARCH="${{ env.CLEAN_ARCH }}" \
             -e DEVICE_PROFILE="${{ env.CLEAN_PROFILE }}" \
