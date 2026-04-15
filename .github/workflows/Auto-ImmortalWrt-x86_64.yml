@@ -33,7 +33,7 @@ on:
         type: boolean
         default: true
       theme_argon:
-        description: "🎨 集成 Argon 主题 (仅主题无控制面板)"
+        description: "🎨 集成 Argon 主题"
         type: boolean
         default: true
       app_ksmbd:
