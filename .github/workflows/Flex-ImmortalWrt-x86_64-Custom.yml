@@ -27,11 +27,11 @@ on:
       app_homeproxy:
         description: "🛡️ 集成 HomeProxy (全能代理)"
         type: boolean
-        default: true
+        default: false
       app_openclash:
         description: "🔌 集成 OpenClash"
         type: boolean
-        default: false
+        default: true
       app_passwall:
         description: "🚀 集成 PassWall"
         type: boolean
@@ -69,7 +69,7 @@ on:
       app_statistics:
         description: "📊 集成 Statistics (状态监控)"
         type: boolean
-        default: true
+        default: false
       app_sqm:
         description: "🚦 集成 SQM QoS"
         type: boolean
