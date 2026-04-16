@@ -273,6 +273,10 @@ declare -a PKG_LIST=(
     "ruby"                              # Ruby 运行环境
     "ruby-yaml"                         # Ruby YAML 解析
     "unzip"                             # 解压缩工具
+    "kmod-tcp-bbr"                      # BBR 拥塞控制
+    "kmod-nft-offload"                  # UPnP / NAT-PMP 自动端口映射
+    "miniupnpd-nftables"                # 硬件/软件流量卸载
+    
 
     # 💻 7. 物理网卡驱动 & 无线工具
     "kmod-igc"                          # Intel i225/i226 2.5G 网卡驱动
