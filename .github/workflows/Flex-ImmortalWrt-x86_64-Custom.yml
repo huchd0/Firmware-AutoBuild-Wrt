@@ -69,7 +69,7 @@ on:
       app_statistics:
         description: "📊 集成 Statistics (CPU/内存/网络图)"
         type: boolean
-        default: true
+        default: false
       app_wireguard:
         description: "🛡️ 集成 WireGuard (内核级虚拟局域网)"
         type: boolean
@@ -93,10 +93,16 @@ on:
         type: boolean
         default: false
 
+# 🌟 优化项1：授予写入 Releases 的权限，防止 403 报错
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     env:
+      # 🌟 优化项2：锁定上海时区，让 Release 发布时间精准无误
+      TZ: Asia/Shanghai
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       INPUT_IP: ${{ github.event.inputs.custom_router_ip }}
       INPUT_ROOTFS: ${{ github.event.inputs.rootfs_size }}
@@ -191,4 +197,7 @@ jobs:
           echo "### 🎉 Flex-ImmortalWrt 编译成功！" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **固件版本:** \`${{ env.FINAL_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **下载入口:** 👉 [**点击直达 Release 页面**](https://github.com/${{ github.repository }}/releases/tag/Build-Custom-${{ env.FINAL_VERSION }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **系统盘容量:** \`${{ env.INPUT_ROOTFS }} MB\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **固件文件名:** \`${{ env.FIRMWARE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 **下载入口:** 👉 [**点击直达 Release 页面**](https://github.com/${{ github.repository }}/releases/tag/Build-Custom-${{ env.FINAL_VERSION }})" >> $GITHUB_STEP_SUMMARY
