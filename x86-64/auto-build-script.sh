@@ -16,15 +16,16 @@ if [ "$APP_OPENCLASH" = "true" ]; then
 fi
 
 # =========================================================
-# 1. 初始化脚本 (网络与存储重定向)
+# 1. 初始化脚本 (网络、存储重定向与官方源修正)
 # =========================================================
 mkdir -p files/etc/uci-defaults
 DYNAMIC_SCRIPT="files/etc/uci-defaults/99-dynamic-settings"
 echo "#!/bin/sh" > $DYNAMIC_SCRIPT
 
 cat >> $DYNAMIC_SCRIPT << EOF
-# --- A. 官方软件源自动修正 ---
-sed -i 's/downloads.immortalwrt.org/mirror.sjtu.edu.cn\/immortalwrt/g' /etc/opkg/distfeeds.conf
+# --- A. 强行锁定 ImmortalWrt 官方纯血软件源 ---
+[ -f /etc/opkg/distfeeds.conf ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' /etc/opkg/distfeeds.conf
+[ -f /etc/apk/repositories ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' /etc/apk/repositories
 
 # --- B. 数据存储重定向 (Collectd) ---
 mkdir -p /opt/collectd_rrd
@@ -75,15 +76,18 @@ fi
 EOF
 
 # =========================================================
-# 2. 静默预装软件包 (精准剔除冗余，仅保留增量包)
+# 2. 静默预装软件包 (精准适配 APK 时代)
 # =========================================================
 BASE_PACKAGES=""
 
-# 核心底层增强工具 (修正官方底包缺失)
-BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl"
+# 核心底层增强工具
+BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl luci-compat"
 BASE_PACKAGES="$BASE_PACKAGES pciutils usbutils ethtool iperf3 irqbalance kmod-vmxnet3"
 
-# 状态监控包 (配合 /opt 数据重定向使用)
+# 🌟 适配新版 luci-app-software，兼容旧版 package-manager
+BASE_PACKAGES="$BASE_PACKAGES luci-app-software luci-i18n-software-zh-cn"
+
+# 状态监控包
 BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn collectd collectd-mod-cpu collectd-mod-interface collectd-mod-memory"
 
 # =========================================================
@@ -113,11 +117,15 @@ BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn col
 [ "$INCLUDE_DOCKER" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-dockerman luci-i18n-dockerman-zh-cn docker-compose"
 
 # =========================================================
-# 4. 极限打包：SquashFS 原生直出大容量，彻底封杀冗余格式
+# 4. 极限打包前置修复与直出
 # =========================================================
 echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
+
+# 🌟 强行纠正云端编译器的坏源，全部重定向到 ImmortalWrt 官方源！
+[ -f "repositories" ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' repositories
+[ -f "repositories.conf" ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' repositories.conf
 
 sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/g" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}" >> .config
 sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=64/g" .config || echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
