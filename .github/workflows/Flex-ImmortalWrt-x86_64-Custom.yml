@@ -23,7 +23,7 @@ on:
       include_docker:
         description: "🐳 Docker 引擎 (虚拟化容器)"
         type: boolean
-        default: true
+        default: false
       app_homeproxy:
         description: "🛡️ HomeProxy (轻量代理工具)"
         type: boolean
