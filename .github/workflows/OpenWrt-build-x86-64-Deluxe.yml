@@ -51,7 +51,7 @@ jobs:
       - name: 安装 Ubuntu 原生编译依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip bzip2 patch python3 findutils zstd
+          sudo apt-get install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip bzip2 patch python3 findutils zstd jq
 
       - name: 下载并解压 ImageBuilder
         run: |
@@ -71,7 +71,7 @@ jobs:
           cp OpenWrt-build-x86-64-Deluxe.sh imagebuilder/
           cd imagebuilder
           
-          # 执行你强大的 OpenWrt-build-x86-64-Deluxe.sh
+          # 执行强大的自定义脚本
           ./OpenWrt-build-x86-64-Deluxe.sh
 
       - name: 生成版本标签
@@ -88,14 +88,14 @@ jobs:
             **🎉 晓敏专属：OpenWrt ${{ env.OWRT_VERSION }} x86_64 终极定制版**
             
             ### 📥 固件下载
-            > **⏬ 请直接滑动到本页面最底部的 `Assets` (资产) 区域，点击 `.img.gz` 结尾的文件即可下载！**
+            > **⏬ 请直接滑动到本页面最底部的 `Assets` (资产) 区域，点击 `.img.gz` 结尾的文件即可高速下载！**
             
             ---
             
-            **🚀 核心特性：**
+            **🚀 核心黑科技与特性：**
             - 🌐 **管理后台**: `http://${{ inputs.custom_ip }}` (智能识别单/多网口并自动分配 WAN/LAN)
             - 📦 **容量扩充**: `${{ inputs.profile }} MB` 系统空间，开机全自动无损挂载 `sda3` 数据大分区
-            - 📶 **Wi-Fi 7 满血**: 注入 MT7925 官方底层固件，后台智能探测硬件路径，散发 `mywifi7` 信号
+            - 📶 **Wi-Fi 7 满血**: 注入 MT7925 官方底层固件，后台智能探测硬件路径，散发 `mywifi7` 信号并强制开启 WPA3/PMF
             - 🛡️ **核心插件**: 内置 OpenClash (预置 Meta 兼容版内核) 与 Argon 现代主题
             - 📊 **全能监控**: CPU、温度、传感器、双Ping (114/8.8.8.8)网络延迟数据全量开机自动激活并持久化到 硬盘sda3。
             - 🔄 **静默守护**: 独创双引擎自动升级策略，每隔一天凌晨 2:00 自动更新且避开底层内核，智能重启网络代理服务。
@@ -104,13 +104,12 @@ jobs:
             - **手动触发升级**：通过 SSH 登录路由器，直接输入全局命令 `upg` 即可随时拉起安全升级流程。
             - **查看执行日志**：输入 `cat /root/upg.log` 可查看完整历史；输入 `tail -f /root/upg.log` 可帅气的实时跟踪滚动状态。
             - **取消自动升级**：若不需要后台定时升级，请登录路由器网页后台，进入 **系统 -> 计划任务**，删除 `0 2 */2 * * /usr/bin/upg` 这一行并点击提交即可。
-            
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: 生成首页摘要与直达链接 (Job Summary)
         run: |
-          echo "### 🎉 晓敏专属 OpenWrt x86_64 定制版编译成功！" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎉 晓敏专属 OpenWrt x86_64 终极定制版编译成功！" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**🎯 核心参数：**" >> $GITHUB_STEP_SUMMARY
           echo "- 🏷️ **底层版本:** \`OpenWrt ${{ env.OWRT_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
