@@ -150,8 +150,8 @@ jobs:
 
       - name: 设置脚本权限
         run: |
-          sed -i 's/\r$//' ${{ github.workspace }}/x86-64/auto-build-script.sh
-          chmod +x ${{ github.workspace }}/x86-64/auto-build-script.sh
+          sed -i 's/\r$//' ${{ github.workspace }}/x86-64/Flex-ImmortalWrt-x86_64-build.sh
+          chmod +x ${{ github.workspace }}/x86-64/Flex-ImmortalWrt-x86_64-build.sh
 
       - name: 解析智能版本号
         id: resolve_version
@@ -168,7 +168,7 @@ jobs:
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
-            -v "${{ github.workspace }}/x86-64/auto-build-script.sh:/home/build/immortalwrt/build.sh" \
+            -v "${{ github.workspace }}/x86-64/Flex-ImmortalWrt-x86_64-build.sh:/home/build/immortalwrt/build.sh" \
             -e CUSTOM_IP="$INPUT_IP" \
             -e ROOTFS_SIZE="$INPUT_ROOTFS" \
             -e INCLUDE_DOCKER="$INCLUDE_DOCKER" \
