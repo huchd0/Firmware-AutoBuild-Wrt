@@ -57,9 +57,10 @@ fi
 # 确保挂载成功后再重定向路径
 mkdir -p /opt/collectd_rrd
 chmod 777 /opt/collectd_rrd
-uci set statistics.collectd.Datadir='/opt/collectd_rrd'
-uci commit statistics
-/etc/init.d/collectd restart >/dev/null 2>&1 &
+# 精确打击 rrdtool 插件的输出路径 (修正 luci_statistics 配置文件名)
+uci set luci_statistics.collectd_rrdtool.DataDir='/opt/collectd_rrd'
+uci commit luci_statistics
+/etc/init.d/luci_statistics restart >/dev/null 2>&1 &
 
 # --- D. 智能网络分配逻辑 ---
 INTERFACES=\$(ls /sys/class/net 2>/dev/null | grep -E '^eth|^enp|^eno' | sort)
