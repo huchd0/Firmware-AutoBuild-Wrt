@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================
-# 0. 云端预处理：OpenClash 核心预备
+# 0. OpenClash 核心预备
 # =========================================================
 mkdir -p files/etc/openclash/core
 if [ "$APP_OPENCLASH" = "true" ]; then
@@ -29,7 +29,6 @@ cat >> $DYNAMIC_SCRIPT << EOF
 
 # --- B. 全自动开垦剩余空间并挂载到 /mnt/sda3 ---
 if ! lsblk | grep -q sda3; then
-    # 模拟键盘按键，自动新建 sda3 吃满剩余空间
     echo -e "n\n3\n\n\nw\n" | fdisk /dev/sda >/dev/null 2>&1
     partprobe /dev/sda >/dev/null 2>&1 || true
     sleep 3
@@ -40,7 +39,6 @@ fi
 
 TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
 if [ -n "\$TARGET_UUID" ]; then
-    # 写入 fstab，强行挂载到 /mnt/sda3
     uci -q delete fstab.sda3 2>/dev/null || true
     uci set fstab.sda3='mount'
     uci set fstab.sda3.uuid="\$TARGET_UUID"
@@ -54,11 +52,8 @@ if [ -n "\$TARGET_UUID" ]; then
 fi
 
 # --- C. 数据存储重定向 (Collectd) ---
-# 确保挂载成功后再重定向路径到 /mnt/sda3
 mkdir -p /mnt/sda3/collectd_rrd
 chmod 777 /mnt/sda3/collectd_rrd
-# 精确打击 rrdtool 插件的输出路径 (修正 luci_statistics 配置文件名)
-uci -q delete statistics.collectd.Datadir 2>/dev/null || true
 uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
 uci commit luci_statistics
 /etc/init.d/luci_statistics restart >/dev/null 2>&1 &
@@ -107,21 +102,28 @@ fi
 EOF
 
 # =========================================================
-# 2. 静默预装软件包
+# 2. 静默预装软件包 (带详细中文注释)
 # =========================================================
 BASE_PACKAGES=""
 
-# 🌟 核心底层增强与 SSL 证书 (修复 https 下载)
-BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl luci-compat ca-bundle ca-certificates"
+# 底层核心与证书
+BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl"             # 分区工具、编辑器、加密下载
+BASE_PACKAGES="$BASE_PACKAGES ca-bundle ca-certificates"        # HTTPS 根证书信任库 (必备)
+BASE_PACKAGES="$BASE_PACKAGES luci-compat"                      # 兼容旧版 LuCI 插件 (如 OpenClash)
 
-# 🌟 物理机硬件维护、分区工具与 Web 终端 (找回网页版 TTYD)
-BASE_PACKAGES="$BASE_PACKAGES pciutils usbutils ethtool iperf3 irqbalance kmod-vmxnet3 e2fsprogs fdisk luci-app-ttyd luci-i18n-ttyd-zh-cn"
+# 硬件驱动与维护
+BASE_PACKAGES="$BASE_PACKAGES pciutils usbutils ethtool"        # 查看 PCI/USB 硬件、网卡工具
+BASE_PACKAGES="$BASE_PACKAGES iperf3 irqbalance"                # 网速测试、多核中断平衡
+BASE_PACKAGES="$BASE_PACKAGES kmod-vmxnet3"                     # 虚拟机网卡驱动支持
+BASE_PACKAGES="$BASE_PACKAGES e2fsprogs fdisk"                  # ext4 格式化与分区操作 (sda3 开荒必备)
 
-# 找回失落的中文：使用 25.12 唯一正统的软件中心包名
-BASE_PACKAGES="$BASE_PACKAGES luci-app-package-manager luci-i18n-package-manager-zh-cn"
+# 基础 UI 管理
+BASE_PACKAGES="$BASE_PACKAGES luci-app-package-manager luci-i18n-package-manager-zh-cn" # 软件包中心
+BASE_PACKAGES="$BASE_PACKAGES luci-app-ttyd luci-i18n-ttyd-zh-cn"                       # 网页 SSH 终端
 
-# 状态监控包 (收集数据到 /opt)
-BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn collectd collectd-mod-cpu collectd-mod-interface collectd-mod-memory"
+# 状态监控 (数据重定向至 sda3)
+BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn"           # 统计图表界面
+BASE_PACKAGES="$BASE_PACKAGES collectd collectd-mod-cpu collectd-mod-interface collectd-mod-memory" # 监控采集引擎
 
 # =========================================================
 # 3. 动态加载 UI 勾选的大插件
@@ -134,29 +136,27 @@ BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn col
 [ "$APP_ADGUARDHOME" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-adguardhome"
 [ "$APP_ALIST" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-alist"
 [ "$APP_QBITTORRENT" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-qbittorrent luci-i18n-qbittorrent-zh-cn"
-[ "$APP_MWAN3" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-mwan3 luci-i18n-mwan3-zh-cn"
-[ "$APP_VLMCSD" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-vlmcsd luci-i18n-vlmcsd-zh-cn"
-[ "$APP_SQM" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-sqm luci-i18n-sqm-zh-cn"
 [ "$APP_WIREGUARD" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-proto-wireguard"
 [ "$APP_TAILSCALE" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES tailscale"
 [ "$APP_ZEROTIER" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-zerotier luci-i18n-zerotier-zh-cn"
-[ "$APP_FRPC" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-frpc luci-i18n-frpc-zh-cn"
 
+# 🌟 新增：全平台推送与磁盘管理
+[ "$APP_WECHATPUSH" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-wechatpush luci-i18n-wechatpush-zh-cn"
+[ "$APP_DISKMAN" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-diskman luci-i18n-diskman-zh-cn"
+
+# 网卡驱动动态加载
 [ "$KMOD_IGC" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES kmod-igc"
-[ "$KMOD_IXGBE" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES kmod-ixgbe"
-[ "$KMOD_E1000E" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES kmod-e1000e"
-[ "$KMOD_R8169" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES kmod-r8169"
 [ "$KMOD_R8125" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES kmod-r8125"
 [ "$INCLUDE_DOCKER" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-dockerman luci-i18n-dockerman-zh-cn docker-compose"
 
 # =========================================================
-# 4. 极限打包前置修复与直出
+# 4. 极限打包
 # =========================================================
 echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
 
-# 🌟 全局搜索替换所有配置内的坏源！
+# 暴力清坏源
 find . -type f \( -name "repositories*" -o -name "distfeeds.conf" \) -exec sed -i 's|mirrors.vsean.net/openwrt|downloads.immortalwrt.org|g' {} + 2>/dev/null || true
 
 sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/g" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}" >> .config
