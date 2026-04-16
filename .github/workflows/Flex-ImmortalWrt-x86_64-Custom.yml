@@ -17,7 +17,7 @@ on:
       rootfs_size:
         description: '核心系统最终容量 (MB) [SquashFS原生直出]'
         required: true
-        default: '10240'
+        default: '1024'
         
       # ====== 核心网络与存储 ======
       include_docker:
