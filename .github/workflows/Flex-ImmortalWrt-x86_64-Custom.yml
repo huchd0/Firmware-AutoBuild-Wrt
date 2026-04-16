@@ -87,11 +87,11 @@ on:
       kmod_intel:
         description: "🔌 Intel 网卡驱动 (千兆/2.5G/万兆)"
         type: boolean
-        default: true
+        default: false
       kmod_realtek:
         description: "🔌 Realtek 瑞昱网卡驱动 (千兆/2.5G/5G)"
         type: boolean
-        default: true
+        default: false
 
 # 授予写入 Releases 的权限
 permissions:
