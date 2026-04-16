@@ -19,7 +19,7 @@ on:
         required: true
         default: '10240'
         
-      # ====== 核心网络与存储 ======
+      # ====== 核心网络与存储 (可根据需要勾选) ======
       include_docker:
         description: "🐳 集成 Docker 引擎"
         type: boolean
@@ -31,11 +31,7 @@ on:
       app_openclash:
         description: "🔌 集成 OpenClash"
         type: boolean
-        default: false
-      app_passwall:
-        description: "🚀 集成 PassWall"
-        type: boolean
-        default: false
+        default: true
       app_ksmbd:
         description: "📁 集成 KSMBD (局域网共享)"
         type: boolean
@@ -46,72 +42,14 @@ on:
         description: "🎨 集成 Argon 主题"
         type: boolean
         default: true
-      app_adguardhome:
-        description: "🛑 集成 AdGuardHome"
-        type: boolean
-        default: false
-      app_alist:
-        description: "🗂️ 集成 AList"
-        type: boolean
-        default: false
-      app_qbittorrent:
-        description: "🧲 集成 qBittorrent"
-        type: boolean
-        default: false
-      app_mwan3:
-        description: "⚖️ 集成 MWAN3 (多线多拨)"
-        type: boolean
-        default: false
-      app_vlmcsd:
-        description: "🔑 集成 KMS 激活服务"
-        type: boolean
-        default: false
       app_statistics:
         description: "📊 集成 Statistics (状态监控)"
         type: boolean
         default: true
-      app_sqm:
-        description: "🚦 集成 SQM QoS"
-        type: boolean
-        default: false
-      app_wireguard:
-        description: "🛡️ 集成 WireGuard"
-        type: boolean
-        default: false
-      app_tailscale:
-        description: "🕸️ 集成 Tailscale"
-        type: boolean
-        default: false
-      app_zerotier:
-        description: "🌍 集成 ZeroTier"
-        type: boolean
-        default: false
-      app_frpc:
-        description: "🚇 集成 FRPC (内网穿透)"
-        type: boolean
-        default: false
-
-      # ====== 实体网卡驱动 ======
       kmod_igc:
         description: "🔌 驱动: Intel i225/i226 (2.5G)"
         type: boolean
         default: true
-      kmod_ixgbe:
-        description: "🔌 驱动: Intel 10G (万兆)"
-        type: boolean
-        default: false
-      kmod_e1000e:
-        description: "🔌 驱动: Intel 千兆"
-        type: boolean
-        default: false
-      kmod_r8169:
-        description: "🔌 驱动: Realtek 瑞昱千兆"
-        type: boolean
-        default: false
-      kmod_r8125:
-        description: "🔌 驱动: Realtek 瑞昱 2.5G"
-        type: boolean
-        default: false
 
 jobs:
   build:
@@ -125,34 +63,17 @@ jobs:
       INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
       APP_HOMEPROXY: ${{ github.event.inputs.app_homeproxy }}
       APP_OPENCLASH: ${{ github.event.inputs.app_openclash }}
-      APP_PASSWALL: ${{ github.event.inputs.app_passwall }}
       APP_KSMBD: ${{ github.event.inputs.app_ksmbd }}
       THEME_ARGON: ${{ github.event.inputs.theme_argon }}
-      APP_ADGUARDHOME: ${{ github.event.inputs.app_adguardhome }}
-      APP_ALIST: ${{ github.event.inputs.app_alist }}
-      APP_QBITTORRENT: ${{ github.event.inputs.app_qbittorrent }}
-      APP_MWAN3: ${{ github.event.inputs.app_mwan3 }}
-      APP_VLMCSD: ${{ github.event.inputs.app_vlmcsd }}
       APP_STATISTICS: ${{ github.event.inputs.app_statistics }}
-      APP_SQM: ${{ github.event.inputs.app_sqm }}
-      APP_WIREGUARD: ${{ github.event.inputs.app_wireguard }}
-      APP_TAILSCALE: ${{ github.event.inputs.app_tailscale }}
-      APP_ZEROTIER: ${{ github.event.inputs.app_zerotier }}
-      APP_FRPC: ${{ github.event.inputs.app_frpc }}
       KMOD_IGC: ${{ github.event.inputs.kmod_igc }}
-      KMOD_IXGBE: ${{ github.event.inputs.kmod_ixgbe }}
-      KMOD_E1000E: ${{ github.event.inputs.kmod_e1000e }}
-      KMOD_R8169: ${{ github.event.inputs.kmod_r8169 }}
-      KMOD_R8125: ${{ github.event.inputs.kmod_r8125 }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置脚本执行权限
-        run: |
-          sed -i 's/\r$//' ${{ github.workspace }}/x86-64/auto-build-script.sh
-          chmod +x ${{ github.workspace }}/x86-64/auto-build-script.sh
+      - name: 设置脚本权限
+        run: chmod +x ${{ github.workspace }}/x86-64/auto-build-script.sh
 
       - name: 解析智能版本号
         id: resolve_version
@@ -175,40 +96,21 @@ jobs:
             -e INCLUDE_DOCKER="$INCLUDE_DOCKER" \
             -e APP_HOMEPROXY="$APP_HOMEPROXY" \
             -e APP_OPENCLASH="$APP_OPENCLASH" \
-            -e APP_PASSWALL="$APP_PASSWALL" \
             -e APP_KSMBD="$APP_KSMBD" \
             -e THEME_ARGON="$THEME_ARGON" \
-            -e APP_ADGUARDHOME="$APP_ADGUARDHOME" \
-            -e APP_ALIST="$APP_ALIST" \
-            -e APP_QBITTORRENT="$APP_QBITTORRENT" \
-            -e APP_MWAN3="$APP_MWAN3" \
-            -e APP_VLMCSD="$APP_VLMCSD" \
             -e APP_STATISTICS="$APP_STATISTICS" \
-            -e APP_SQM="$APP_SQM" \
-            -e APP_WIREGUARD="$APP_WIREGUARD" \
-            -e APP_TAILSCALE="$APP_TAILSCALE" \
-            -e APP_ZEROTIER="$APP_ZEROTIER" \
-            -e APP_FRPC="$APP_FRPC" \
             -e KMOD_IGC="$KMOD_IGC" \
-            -e KMOD_IXGBE="$KMOD_IXGBE" \
-            -e KMOD_E1000E="$KMOD_E1000E" \
-            -e KMOD_R8169="$KMOD_R8169" \
-            -e KMOD_R8125="$KMOD_R8125" \
             immortalwrt/imagebuilder:x86-64-openwrt-${{ env.FINAL_VERSION }} /bin/bash /home/build/immortalwrt/build.sh
 
-      - name: 发布固件到 Releases
+      - name: 发布固件
         uses: softprops/action-gh-release@v2
         with:
           tag_name: Build-${{ env.FINAL_VERSION }}
-          name: ImmortalWrt ${{ env.FINAL_VERSION }} 实体机终极版
+          name: ImmortalWrt ${{ env.FINAL_VERSION }} 实体机稳定版
           body: |
-            ## 🚀 固件高级特性
-            - **内核预装**: 已在云端内嵌 OpenClash Meta 最新核心，开箱即用。
-            - **智能网口适配**: eth0 固定为 WAN/WAN6，其余自动桥接为 LAN；若识别为单网口设备，自动切换为纯 LAN 旁路由模式。
-            - **系统级容错扩容**: 首次开机安全检查后，自动将系统盘 (`sda2`) 无损拉伸至 **${{ env.INPUT_ROOTFS }}MB**。
-            - **数据绝对隔离**: 剩余空间识别为 `sda3`，仅执行安全挂载至 `/opt`，绝不触碰原有分区数据。
-            - **原生系统恢复**: 终端输入 `restore-factory` 即可从 /opt 提取纯净备份还原网络设置。
-          
-          # 仅上传唯一且最纯正的 EFI 引导固件，杜绝选择困难
+            ### 🛠️ 固件更新日志
+            - **OpenClash 内核**: 已预集成 Meta 最新版本核心 (非 v3，兼容性优先)。
+            - **网络接口**: 强制 eth0 独占 WAN，其余端口桥接 LAN，单网口自动切换。
+            - **磁盘管理**: RootFS 自动拉伸至 ${{ env.INPUT_ROOTFS }}MB，/opt 安全挂载。
           files: ${{ github.workspace }}/bin/targets/x86/64/*-ext4-combined-efi.img.gz
           token: ${{ secrets.GITHUB_TOKEN }}
