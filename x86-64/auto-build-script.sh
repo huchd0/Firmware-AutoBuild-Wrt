@@ -16,28 +16,29 @@ if [ "$APP_OPENCLASH" = "true" ]; then
 fi
 
 # =========================================================
-# 1. 初始化脚本
+# 1. 基础包与初始化脚本
 # =========================================================
 mkdir -p files/etc/uci-defaults
 DYNAMIC_SCRIPT="files/etc/uci-defaults/99-dynamic-settings"
 echo "#!/bin/sh" > $DYNAMIC_SCRIPT
 
-BASE_PACKAGES="base-files block-mount default-settings-chn luci-i18n-base-zh-cn lsblk blkid tar"
+BASE_PACKAGES="base-files block-mount default-settings-chn luci-i18n-base-zh-cn"
 BASE_PACKAGES="$BASE_PACKAGES luci-i18n-package-manager-zh-cn irqbalance htop curl wget-ssl kmod-vmxnet3"
 
 # =========================================================
-# 🌟 核心魔法：纯净网络与数据绝对保守策略
+# 🌟 核心魔法：暴力重建网络
 # =========================================================
 cat >> $DYNAMIC_SCRIPT << EOF
 exec >/var/log/first_boot.log 2>&1
 
-# --- A. 彻底推倒重建网络配置 ---
+# --- 彻底推倒重建网络配置，杜绝幽灵 eth0 ---
 INTERFACES=\$(ls /sys/class/net 2>/dev/null | grep -E '^eth|^enp|^eno' | sort)
 ETH_COUNT=\$(echo "\$INTERFACES" | grep -c '^')
 
 if [ "\$ETH_COUNT" -gt 0 ]; then
     FIRST_ETH=\$(echo "\$INTERFACES" | head -n 1)
     
+    # 物理抹除旧配置
     rm -f /etc/config/network
     touch /etc/config/network
     
@@ -58,8 +59,10 @@ if [ "\$ETH_COUNT" -gt 0 ]; then
     uci set network.lan.netmask='255.255.255.0'
 
     if [ "\$ETH_COUNT" -eq 1 ]; then
+        # 单网口：只有 LAN
         uci add_list network.br_lan.ports="\$FIRST_ETH"
     else
+        # 多网口：首口 WAN/WAN6，其余桥接 LAN
         uci set network.wan=interface
         uci set network.wan.device="\$FIRST_ETH"
         uci set network.wan.proto='dhcp'
@@ -74,55 +77,10 @@ if [ "\$ETH_COUNT" -gt 0 ]; then
     fi
     uci commit network
 fi
-
-# --- B. 数据盘安全检测挂载 (sda3) ---
-# 严格遵循：不新建、不格式化。只要物理存在且有文件系统，就尝试挂载。
-ROOT_DISK=\$(lsblk -d -n -o NAME | grep -E 'sda|nvme[0-9]n[0-9]' | head -n 1)
-if [ -n "\$ROOT_DISK" ]; then
-    DISK_DEV="/dev/\$ROOT_DISK"
-    echo "\$ROOT_DISK" | grep -q "nvme" && P3="\${DISK_DEV}p3" || P3="\${DISK_DEV}3"
-
-    if [ -b "\$P3" ]; then
-        P3_UUID=\$(blkid -s UUID -o value \$P3)
-        if [ -n "\$P3_UUID" ]; then
-            uci -q delete fstab.opt_mount || true
-            uci set fstab.opt_mount='mount'
-            uci set fstab.opt_mount.uuid="\$P3_UUID"
-            uci set fstab.opt_mount.target='/opt'
-            uci set fstab.opt_mount.fstype='ext4'
-            uci set fstab.opt_mount.enabled='1'
-            uci commit fstab
-            
-            mkdir -p /opt/collectd_rrd /opt/backup /opt/docker
-            mount \$P3 /opt 2>/dev/null || true
-            
-            if mountpoint -q /opt; then
-                [ ! -f /opt/backup/factory_config.tar.gz ] && tar -czf /opt/backup/factory_config.tar.gz /etc/config /etc/passwd /etc/shadow 2>/dev/null
-                if [ -f /etc/config/statistics ]; then
-                    uci set statistics.collectd.Datadir='/opt/collectd_rrd'
-                    uci commit statistics
-                fi
-            fi
-        fi
-    fi
-fi
-
-# 注入恢复指令
-cat > /bin/restore-factory << 'RE'
-#!/bin/sh
-if [ -f /opt/backup/factory_config.tar.gz ]; then
-    rm -rf /etc/config/*
-    tar -xzf /opt/backup/factory_config.tar.gz -C /
-    reboot
-else
-    echo "未发现备份，请确认 /opt 挂载。"
-fi
-RE
-chmod +x /bin/restore-factory
 EOF
 
 # =========================================================
-# 2. 插件组装
+# 2. 插件包全量组装逻辑
 # =========================================================
 [ "$THEME_ARGON" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-theme-argon"
 [ "$APP_HOMEPROXY" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-homeproxy luci-i18n-homeproxy-zh-cn"
@@ -149,19 +107,19 @@ EOF
 [ "$INCLUDE_DOCKER" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-dockerman luci-i18n-dockerman-zh-cn docker-compose"
 
 # =========================================================
-# 4. 极限打包：直接在云端生成原生大容量镜像
+# 4. 极限打包：SquashFS 原生直出大容量
 # =========================================================
 echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
 
-# 重点！直接使用你在网页填写的 ROOTFS_SIZE 变量
-# 如果填写 10240，云端直接打包出一个完美 10GB 原生 ext4 镜像！
+# 重点 1：将镜像分区在云端直接撑满至填写的容量 (默认 10GB)
 sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/g" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}" >> .config
 sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=64/g" .config || echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
 
-echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config
-echo "CONFIG_TARGET_ROOTFS_SQUASHFS=n" >> .config
+# 重点 2：回归官方正统架构，开启 squashfs，关闭 ext4
+echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> .config
+echo "CONFIG_TARGET_ROOTFS_EXT4FS=n" >> .config   
 echo "CONFIG_TARGET_ROOTFS_TARGZ=n" >> .config
 echo "CONFIG_GRUB_IMAGES=n" >> .config
 echo "CONFIG_VDI_IMAGES=n" >> .config
