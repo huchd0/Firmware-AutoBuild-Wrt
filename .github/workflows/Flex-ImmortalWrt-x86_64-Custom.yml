@@ -55,7 +55,7 @@ on:
         type: boolean
         default: true
       app_adguardhome:
-        description: "🛑 集成 AdGuardHome (全局广告拦截与DNS隐私保护)"
+        description: "🛑 集成 AdGuardHome (广告拦截与隐私DNS)"
         type: boolean
         default: false
       app_alist:
