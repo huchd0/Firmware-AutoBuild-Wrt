@@ -27,7 +27,7 @@ cat >> $DYNAMIC_SCRIPT << EOF
 [ -f /etc/opkg/distfeeds.conf ] && sed -i 's|mirrors.vsean.net/openwrt|downloads.immortalwrt.org|g' /etc/opkg/distfeeds.conf
 [ -f /etc/apk/repositories ] && sed -i 's|mirrors.vsean.net/openwrt|downloads.immortalwrt.org|g' /etc/apk/repositories
 
-# --- B. 全自动开垦剩余空间并挂载到 /opt ---
+# --- B. 全自动开垦剩余空间并挂载到 /mnt/sda3 ---
 if ! lsblk | grep -q sda3; then
     # 模拟键盘按键，自动新建 sda3 吃满剩余空间
     echo -e "n\n3\n\n\nw\n" | fdisk /dev/sda >/dev/null 2>&1
@@ -40,25 +40,26 @@ fi
 
 TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
 if [ -n "\$TARGET_UUID" ]; then
-    # 写入 fstab，强行挂载到 /opt
-    uci -q delete fstab.opt 2>/dev/null || true
-    uci set fstab.opt='mount'
-    uci set fstab.opt.uuid="\$TARGET_UUID"
-    uci set fstab.opt.target='/opt'
-    uci set fstab.opt.enabled='1'
-    uci set fstab.opt.fstype='ext4'
+    # 写入 fstab，强行挂载到 /mnt/sda3
+    uci -q delete fstab.sda3 2>/dev/null || true
+    uci set fstab.sda3='mount'
+    uci set fstab.sda3.uuid="\$TARGET_UUID"
+    uci set fstab.sda3.target='/mnt/sda3'
+    uci set fstab.sda3.enabled='1'
+    uci set fstab.sda3.fstype='ext4'
     uci commit fstab
     
-    mkdir -p /opt/collectd_rrd
-    mount /dev/sda3 /opt 2>/dev/null || true
+    mkdir -p /mnt/sda3/collectd_rrd
+    mount /dev/sda3 /mnt/sda3 2>/dev/null || true
 fi
 
 # --- C. 数据存储重定向 (Collectd) ---
-# 确保挂载成功后再重定向路径
-mkdir -p /opt/collectd_rrd
-chmod 777 /opt/collectd_rrd
+# 确保挂载成功后再重定向路径到 /mnt/sda3
+mkdir -p /mnt/sda3/collectd_rrd
+chmod 777 /mnt/sda3/collectd_rrd
 # 精确打击 rrdtool 插件的输出路径 (修正 luci_statistics 配置文件名)
-uci set luci_statistics.collectd_rrdtool.DataDir='/opt/collectd_rrd'
+uci -q delete statistics.collectd.Datadir 2>/dev/null || true
+uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
 uci commit luci_statistics
 /etc/init.d/luci_statistics restart >/dev/null 2>&1 &
 
