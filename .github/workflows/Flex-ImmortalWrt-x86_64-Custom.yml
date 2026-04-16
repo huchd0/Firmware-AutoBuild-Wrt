@@ -67,7 +67,7 @@ on:
         type: boolean
         default: false
       app_statistics:
-        description: "📊 集成 Statistics (CPU/内存/网络的走势图)"
+        description: "📊 集成 Statistics (CPU/内存/网络图)"
         type: boolean
         default: true
       app_wireguard:
@@ -85,11 +85,11 @@ on:
 
       # ====== 实体网卡驱动 ======
       kmod_igc:
-        description: "🔌 驱动: Intel i225/i226 (Intel 2.5G 网卡驱动)"
+        description: "🔌 驱动: Intel i225/i226 (网卡驱动)"
         type: boolean
         default: true
       kmod_r8125:
-        description: "🔌 驱动: Realtek 瑞昱 2.5G (螃蟹 2.5G 网卡驱动)"
+        description: "🔌 驱动: Realtek 瑞昱 2.5G (网卡驱动)"
         type: boolean
         default: false
 
