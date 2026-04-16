@@ -84,8 +84,8 @@ BASE_PACKAGES=""
 BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl luci-compat"
 BASE_PACKAGES="$BASE_PACKAGES pciutils usbutils ethtool iperf3 irqbalance kmod-vmxnet3"
 
-# 🌟 回归官方主线包名：彻底修复软件中心中文界面
-BASE_PACKAGES="$BASE_PACKAGES luci-app-opkg luci-i18n-opkg-zh-cn"
+# 🌟 找回失落的中文：使用 25.12 唯一正统的软件中心包名
+BASE_PACKAGES="$BASE_PACKAGES luci-app-package-manager luci-i18n-package-manager-zh-cn"
 
 # 状态监控包
 BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn collectd collectd-mod-cpu collectd-mod-interface collectd-mod-memory"
@@ -123,7 +123,7 @@ echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
 
-# 🌟 纠正云端编译器的坏源，全部重定向到 ImmortalWrt 官方源！
+# 🌟 强行纠正云端编译器的坏源，全部重定向到 ImmortalWrt 官方源！
 [ -f "repositories" ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' repositories
 [ -f "repositories.conf" ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' repositories.conf
 
