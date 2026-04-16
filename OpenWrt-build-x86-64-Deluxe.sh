@@ -243,7 +243,13 @@ if [ -x "/etc/init.d/collectd" ] && [ ! -f "/etc/collectd_inited" ]; then
     touch /etc/collectd_inited
 fi
 
-# 7. 软件源替换与离线 APK 安装
+# --- 🎯 7. 强行激活 BBR 网络加速引擎 ---
+if ! grep -q "bbr" /etc/sysctl.conf; then
+    echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+fi
+
+# 8. 软件源替换与离线 APK 安装
 if [ -d "/etc/apk/repositories.d" ]; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
 fi
