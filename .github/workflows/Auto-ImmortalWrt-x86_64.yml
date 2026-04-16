@@ -121,7 +121,6 @@ jobs:
       INPUT_IP: ${{ github.event.inputs.custom_router_ip }}
       INPUT_ROOTFS: ${{ github.event.inputs.rootfs_size }}
       
-      # UI 变量映射
       INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
       APP_HOMEPROXY: ${{ github.event.inputs.app_homeproxy }}
       APP_OPENCLASH: ${{ github.event.inputs.app_openclash }}
@@ -201,7 +200,6 @@ jobs:
           cd ${{ github.workspace }}/bin/targets/x86/64/
           ORIGINAL_FILE=$(ls *-squashfs-combined-efi.img.gz | head -n 1)
           NEW_NAME="ImmortalWrt-Auto-${{ env.FINAL_VERSION }}-x86-64-squashfs-efi.img.gz"
-          # 加上 sudo，强制提升权限来重命名 root 所有的文件
           sudo mv "$ORIGINAL_FILE" "$NEW_NAME"
           echo "FIRMWARE_NAME=$NEW_NAME" >> $GITHUB_ENV
 
@@ -212,8 +210,9 @@ jobs:
           name: ImmortalWrt Auto ${{ env.FINAL_VERSION }} 究极全能版
           body: |
             ### 🛠️ 终极架构与特性
-            - **无损出包**: 系统盘直接在云端构建为 ${{ env.INPUT_ROOTFS }}MB。
+            - **无损出包**: 系统盘直接在云端构建为 ${{ env.INPUT_ROOTFS }}MB，底层自带 Overlay 保护机制。
             - **专属网络**: 强制 eth0 独占 WAN，其余网口桥接 LAN；单网口自动切换纯旁路由模式。
-            - **自由定制**: 支持在 GitHub 编译前自选组装超过 20+ 款高阶路由插件。
+            - **源与数据**: 官方源自动修正，Collectd 监控数据转移至 /opt 保障闪存寿命。
+            - **极客精简**: 剔除了官方冗余底包，纯粹的极致效能体验。
           files: ${{ github.workspace }}/bin/targets/x86/64/${{ env.FIRMWARE_NAME }}
           token: ${{ secrets.GITHUB_TOKEN }}
