@@ -16,7 +16,7 @@ if [ "$APP_OPENCLASH" = "true" ]; then
 fi
 
 # =========================================================
-# 1. 初始化脚本 (网络、存储重定向与官方源修正)
+# 1. 初始化脚本 (开机自启核心逻辑)
 # =========================================================
 mkdir -p files/etc/uci-defaults
 DYNAMIC_SCRIPT="files/etc/uci-defaults/99-dynamic-settings"
@@ -24,15 +24,44 @@ echo "#!/bin/sh" > $DYNAMIC_SCRIPT
 
 cat >> $DYNAMIC_SCRIPT << EOF
 # --- A. 强行锁定 ImmortalWrt 官方纯血软件源 ---
-[ -f /etc/opkg/distfeeds.conf ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' /etc/opkg/distfeeds.conf
-[ -f /etc/apk/repositories ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' /etc/apk/repositories
+[ -f /etc/opkg/distfeeds.conf ] && sed -i 's|mirrors.vsean.net/openwrt|downloads.immortalwrt.org|g' /etc/opkg/distfeeds.conf
+[ -f /etc/apk/repositories ] && sed -i 's|mirrors.vsean.net/openwrt|downloads.immortalwrt.org|g' /etc/apk/repositories
 
-# --- B. 数据存储重定向 (Collectd) ---
+# --- B. 🌟 吸收你的绝招：全自动开垦剩余空间并挂载到 /opt ---
+if ! lsblk | grep -q sda3; then
+    # 模拟键盘按键，自动新建 sda3 吃满剩余空间
+    echo -e "n\n3\n\n\nw\n" | fdisk /dev/sda >/dev/null 2>&1
+    partprobe /dev/sda >/dev/null 2>&1 || true
+    sleep 3
+    if lsblk | grep -q sda3; then 
+        mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
+    fi
+fi
+
+TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
+if [ -n "\$TARGET_UUID" ]; then
+    # 写入 fstab，强行挂载到 /opt
+    uci -q delete fstab.opt 2>/dev/null || true
+    uci set fstab.opt='mount'
+    uci set fstab.opt.uuid="\$TARGET_UUID"
+    uci set fstab.opt.target='/opt'
+    uci set fstab.opt.enabled='1'
+    uci set fstab.opt.fstype='ext4'
+    uci commit fstab
+    
+    mkdir -p /opt/collectd_rrd
+    mount /dev/sda3 /opt 2>/dev/null || true
+fi
+
+# --- C. 数据存储重定向 (Collectd) ---
+# 确保挂载成功后再重定向路径
 mkdir -p /opt/collectd_rrd
+chmod 777 /opt/collectd_rrd
 uci set statistics.collectd.Datadir='/opt/collectd_rrd'
 uci commit statistics
+/etc/init.d/collectd restart >/dev/null 2>&1 &
 
-# --- C. 智能网络分配逻辑 ---
+# --- D. 智能网络分配逻辑 ---
 INTERFACES=\$(ls /sys/class/net 2>/dev/null | grep -E '^eth|^enp|^eno' | sort)
 ETH_COUNT=\$(echo "\$INTERFACES" | grep -c '^')
 if [ "\$ETH_COUNT" -gt 0 ]; then
@@ -76,18 +105,18 @@ fi
 EOF
 
 # =========================================================
-# 2. 静默预装软件包 (精准适配 APK 时代)
+# 2. 静默预装软件包 (精准适配)
 # =========================================================
 BASE_PACKAGES=""
 
-# 核心底层增强工具
-BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl luci-compat"
+# 核心底层增强工具 (加入 e2fsprogs 确保格式化 sda3 成功)
+BASE_PACKAGES="$BASE_PACKAGES sgdisk nano wget-ssl luci-compat e2fsprogs fdisk"
 BASE_PACKAGES="$BASE_PACKAGES pciutils usbutils ethtool iperf3 irqbalance kmod-vmxnet3"
 
 # 🌟 找回失落的中文：使用 25.12 唯一正统的软件中心包名
 BASE_PACKAGES="$BASE_PACKAGES luci-app-package-manager luci-i18n-package-manager-zh-cn"
 
-# 状态监控包
+# 状态监控包 (收集数据到 /opt)
 BASE_PACKAGES="$BASE_PACKAGES luci-app-statistics luci-i18n-statistics-zh-cn collectd collectd-mod-cpu collectd-mod-interface collectd-mod-memory"
 
 # =========================================================
@@ -123,9 +152,8 @@ echo "uci commit" >> $DYNAMIC_SCRIPT
 echo "exit 0" >> $DYNAMIC_SCRIPT
 chmod +x $DYNAMIC_SCRIPT
 
-# 🌟 强行纠正云端编译器的坏源，全部重定向到 ImmortalWrt 官方源！
-[ -f "repositories" ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' repositories
-[ -f "repositories.conf" ] && sed -i 's/mirrors.vsean.net\/openwrt/downloads.immortalwrt.org/g' repositories.conf
+# 🌟 降维打击源修正：全局搜索替换所有配置内的坏源！
+find . -type f \( -name "repositories*" -o -name "distfeeds.conf" \) -exec sed -i 's|mirrors.vsean.net/openwrt|downloads.immortalwrt.org|g' {} + 2>/dev/null || true
 
 sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/g" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}" >> .config
 sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=64/g" .config || echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
