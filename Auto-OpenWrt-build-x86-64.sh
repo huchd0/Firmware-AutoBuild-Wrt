@@ -27,17 +27,25 @@ echo ">>> 2. 准备初始化文件夹 <<<"
 mkdir -p files/root
 mkdir -p files/etc/uci-defaults
 
-echo ">>> 3. 下载第三方 APK 插件与 OpenClash 核心 <<<"
-OPENCLASH_URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
+echo ">>> 3. 下载第三方插件与 OpenClash 核心 (智能适配 IPK/APK) <<<"
+# 自动判断当前编译的是新版(apk)还是旧版(ipk)
+if [[ "$OWRT_VERSION" == *"24.10"* ]] || [[ "$OWRT_VERSION" == *"25."* ]] || [[ "$OWRT_VERSION" == *"SNAPSHOT"* ]]; then
+    PKG_EXT="apk"
+else
+    PKG_EXT="ipk"
+fi
+echo "当前 OpenWrt 版本为 $OWRT_VERSION，使用包后缀: $PKG_EXT"
+
+OPENCLASH_URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.${PKG_EXT}" | cut -d '"' -f 4)
 if [ -n "$OPENCLASH_URL" ]; then
-    echo "正在下载 OpenClash APK..."
-    wget -qO files/root/luci-app-openclash.apk "$OPENCLASH_URL"
+    echo "正在下载 OpenClash..."
+    wget -qO files/root/luci-app-openclash.${PKG_EXT} "$OPENCLASH_URL"
 fi
 
-ARGON_URL=$(curl -s https://api.github.com/repos/jerrykuku/luci-theme-argon/releases | grep -m 1 "browser_download_url.*\.apk" | cut -d '"' -f 4)
+ARGON_URL=$(curl -s https://api.github.com/repos/jerrykuku/luci-theme-argon/releases | grep -m 1 "browser_download_url.*\.${PKG_EXT}" | cut -d '"' -f 4)
 if [ -n "$ARGON_URL" ]; then
-    echo "正在下载 Argon 主题 APK..."
-    wget -qO files/root/luci-theme-argon.apk "$ARGON_URL"
+    echo "正在下载 Argon 主题..."
+    wget -qO files/root/luci-theme-argon.${PKG_EXT} "$ARGON_URL"
 fi
 
 # 提前下载并注入 OpenClash Meta 兼容版内核
@@ -89,7 +97,6 @@ fi
 uci commit network
 
 # --- C. 智能大分区挂载保护 (动态抓取 UUID) ---
-# 兼容 NVMe 和常规 SATA/USB 存储，寻找第三个分区
 TARGET_DEV=""
 if [ -b "/dev/nvme0n1p3" ]; then
     TARGET_DEV="/dev/nvme0n1p3"
@@ -98,9 +105,7 @@ elif [ -b "/dev/sda3" ]; then
 fi
 
 if [ -n "\$TARGET_DEV" ]; then
-    # 动态获取该分区的真实 UUID
     TARGET_UUID=\$(blkid -s UUID -o value "\$TARGET_DEV")
-    
     if [ -n "\$TARGET_UUID" ]; then
         echo "config 'global'" > /etc/config/fstab
         echo "  option  anon_swap   '0'" >> /etc/config/fstab
@@ -118,13 +123,15 @@ if [ -n "\$TARGET_DEV" ]; then
     fi
 fi
 
-# --- D. 软件源与插件安装 ---
-if [ -d "/etc/apk/repositories.d" ]; then
-    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
+# --- D. 软件源换源与双引擎插件安装 ---
+if command -v apk >/dev/null 2>&1; then
+    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list 2>/dev/null
+    apk add -q --allow-untrusted /root/*.apk
+elif command -v opkg >/dev/null 2>&1; then
+    sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/opkg/distfeeds.conf 2>/dev/null
+    opkg install /root/*.ipk
 fi
-
-apk add -q --allow-untrusted /root/*.apk
-rm -f /root/*.apk
+rm -f /root/*.apk /root/*.ipk
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
@@ -134,7 +141,7 @@ chmod +x files/etc/uci-defaults/99-custom-setup
 # --- E. 全自动静默升级与定时任务 (双引擎自适应版) ---
 echo "正在生成自动升级脚本与定时任务..."
 
-# 🌟 创建目录
+# 🌟 修复点：必须提前创建目录，否则下面写入文件会报错中断
 mkdir -p files/usr/bin
 
 cat << 'EOF_UPGRADE' > files/usr/bin/upg
@@ -217,7 +224,6 @@ chmod 0600 files/etc/crontabs/root
 echo ">>> 5. 配置官方软件列表 <<<"
 
 declare -a PKG_LIST=(
-
     # 🌐 1. 核心网络控制
     "-dnsmasq"                          # [卸载] 自带的简配版 dnsmasq
     "dnsmasq-full"                      # [安装] 功能完整的 dnsmasq-full (OpenClash 等强依赖)
@@ -231,9 +237,9 @@ declare -a PKG_LIST=(
     "luci-i18n-package-manager-zh-cn"   # 软件包管理器中文包
 
     # 🔌 3. 实用功能插件
-    "luci-app-ttyd"                     # 网页版命令行终端 (浏览器里敲代码)
+    "luci-app-ttyd"                     # 网页版命令行终端
     "luci-i18n-ttyd-zh-cn"              # 终端中文包
-    "luci-app-ksmbd"                    # 局域网文件共享 (轻量高效的 NAS 功能)
+    "luci-app-ksmbd"                    # 局域网文件共享
     "luci-i18n-ksmbd-zh-cn"             # 共享中文包
 
     # 💾 4. 磁盘管理与分区工具 (扩容与 Docker 必备)
@@ -248,8 +254,8 @@ declare -a PKG_LIST=(
     "kmod-usb-storage"                  # USB 存储核心驱动
     "kmod-usb-storage-uas"              # USB UASP 协议加速驱动
     "kmod-fs-ext4"                      # EXT4 格式支持
-    "kmod-fs-ntfs3"                     # NTFS 格式支持 (Windows 硬盘)
-    "kmod-fs-vfat"                      # FAT/FAT32 格式支持 (老U盘)
+    "kmod-fs-ntfs3"                     # NTFS 格式支持
+    "kmod-fs-vfat"                      # FAT/FAT32 格式支持
 
     # ⚙️ 6. 核心底层依赖 (OpenClash 等代理插件所需)
     "coreutils-nohup"                   # 后台运行支持
@@ -273,7 +279,6 @@ declare -a PKG_LIST=(
     "iwinfo"                            # 无线网络信息查看工具
 )
 
-# 魔法操作：将上面的数组自动转换成以空格分隔的一整行字符串，完美交给 make 命令
 PACKAGES="${PKG_LIST[*]}"
 
 echo ">>> 6. 开始 Make Image 打包 <<<"
