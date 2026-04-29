@@ -54,10 +54,23 @@ if [ -n "$ARGON_URL" ]; then
     wget -qO files/root/luci-theme-argon.apk "$ARGON_URL"
 fi
 
-# --- 🎯 抓取 NetWiz 网络向导 ---
-NETWIZ_URL=$(curl -sL https://api.github.com/repos/sdxmhs/luci-app-netwizs/releases | jq -r '.[0].assets[] | select(.name | endswith(".apk")) | .browser_download_url' | head -n 1)
+# --- 🎯 抓取 NetWiz 网络向导 (主程序 + 中文包) ---
+echo "正在获取 Netwiz 最新版本下载链接..."
+API_JSON=$(curl -sL https://api.github.com/repos/sdxmhs/luci-app-netwizs/releases)
+
+# 主程序
+NETWIZ_URL=$(echo "$API_JSON" | jq -r '.[0].assets[] | select(.name == "apk_luci-app-netwiz.apk") | .browser_download_url' | head -n 1)
+# 简体中文包
+NETWIZ_ZH_URL=$(echo "$API_JSON" | jq -r '.[0].assets[] | select(.name == "apk_luci-i18n-netwiz-zh-cn.apk") | .browser_download_url' | head -n 1)
+
 if [ -n "$NETWIZ_URL" ]; then
+    echo "下载 Netwiz 主程序..."
     wget -qO files/root/luci-app-netwiz.apk "$NETWIZ_URL"
+fi
+
+if [ -n "$NETWIZ_ZH_URL" ]; then
+    echo "下载 Netwiz 中文包..."
+    wget -qO files/root/luci-i18n-netwiz-zh-cn.apk "$NETWIZ_ZH_URL"
 fi
 
 echo "正在下载 OpenClash Meta 内核..."
