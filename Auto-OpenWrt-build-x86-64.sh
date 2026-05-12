@@ -141,7 +141,6 @@ chmod +x files/etc/uci-defaults/99-custom-setup
 # --- E. 全自动静默升级与定时任务 (双引擎自适应版) ---
 echo "正在生成自动升级脚本与定时任务..."
 
-# 🌟 修复点：必须提前创建目录，否则下面写入文件会报错中断
 mkdir -p files/usr/bin
 
 cat << 'EOF_UPGRADE' > files/usr/bin/upg
@@ -218,7 +217,6 @@ mkdir -p files/etc/crontabs
 echo "0 2 */2 * * /usr/bin/upg" > files/etc/crontabs/root
 echo "" >> files/etc/crontabs/root
 
-# 🎯 赋予 crontab 正确的安全权限 (600)，否则计划任务会失效
 chmod 0600 files/etc/crontabs/root
 
 echo ">>> 5. 配置官方软件列表 <<<"
@@ -301,27 +299,4 @@ for file in bin/targets/x86/64/*combined-efi.img.gz; do
   fi
 done
 
-- name: 🧹 智能清理“无需更新”的运行记录
-        if: always() # 确保无论如何最后都会执行清理
-        run: |
-          echo "开始检索 Workflow 历史记录..."
-          # 获取最近 100 次成功的运行记录，并输出创建和更新的时间戳
-          gh run list --workflow "${{ github.workflow }}" --status success --limit 100 --json databaseId,createdAt,updatedAt > runs.json
-
-          TO_DELETE=$(jq -r '[.[] | select((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601) < 60)] | .[3:] | .[].databaseId' runs.json)
-          
-          if [ -z "$TO_DELETE" ]; then
-            echo "✅ 目前没有多余的旧记录需要清理。"
-          else
-            echo "发现需要清理的未编译记录，开始执行删除..."
-            for run_id in $TO_DELETE; do
-              echo "🗑️ 正在删除跳过的旧记录 ID: $run_id"
-              gh run delete "$run_id"
-            done
-            echo "✅ 清理完成！"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 echo ">>> 全部构建任务已圆满完成！ <<<"
-
