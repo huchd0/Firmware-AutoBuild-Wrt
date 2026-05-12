@@ -2,7 +2,7 @@ name: Auto-OpenWrt-x86_64-智能自动编译发布
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # 🌟 动态读取面板输入。如果是定时任务自动运行，则自动降级使用后面的默认值
+  # 读取面板输入定时任务自动运行，自动降级使用后面的默认值
   MANAGEMENT_IP: ${{ inputs.custom_ip || '192.168.100.1' }}
   ROOTFS_SIZE: ${{ inputs.profile || '1024' }}
 
@@ -163,3 +163,25 @@ jobs:
             - **分区配置**: Kernel: `64MB` | RootFS: `${{ env.ROOTFS_SIZE }}MB`
             - **硬盘挂载**: 智能抓取 sda3 或 nvme0n1p3 动态绑定
             - **固件体积**: `${{ env.FIRMWARE_SIZE }}`
+
+      - name: 🧹 智能清理“无需更新”的运行记录
+        if: always()
+        run: |
+          echo "开始检索 Workflow 历史记录..."
+          gh run list --workflow "${{ github.workflow }}" --status success --limit 100 --json databaseId,createdAt,updatedAt > runs.json
+
+          # 提取运行时间小于 300 秒 (5分钟) 的跳过记录，保留最近 3 个，其余准备删除
+          TO_DELETE=$(jq -r '[.[] | select((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601) < 300)] | .[3:] | .[].databaseId' runs.json)
+          
+          if [ -z "$TO_DELETE" ]; then
+            echo "✅ 目前没有多余的旧记录需要清理。"
+          else
+            echo "发现需要清理的未编译记录，开始执行删除..."
+            for run_id in $TO_DELETE; do
+              echo "🗑️ 正在删除跳过的旧记录 ID: $run_id"
+              gh run delete "$run_id"
+            done
+            echo "✅ 清理完成！"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
