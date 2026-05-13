@@ -35,6 +35,12 @@ on:
 jobs:
   check_and_build:
     runs-on: ubuntu-latest
+    # 显式声明这两个权限
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - name: Checkout 代码
     steps:
       - name: Checkout 代码
         uses: actions/checkout@v4
@@ -51,13 +57,13 @@ jobs:
           # 2. 获取本地最后发布 (兼容 rc 版本的正则匹配)
           MY_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | grep '"name":' | grep 'OpenWrt' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?' | head -n 1 || echo "0.0.0")
 
-          # 🌟 控制台直观日志输出
+          # 控制台直观日志输出
           echo "========================================"
           echo "官方最新版本: $OFFICIAL_LATEST"
           echo "本地最后发布: $MY_LATEST"
           echo "========================================"
 
-          # 🌟 写入 GitHub Actions 首页摘要面板 (Job Summary)
+          #  写入 GitHub Actions 首页摘要面板
           echo "### 🤖 固件版本检测摘要" >> $GITHUB_STEP_SUMMARY
           echo "| 检测项 | 版本号 |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
@@ -104,7 +110,7 @@ jobs:
       - name: 运行编译脚本
         if: steps.check_version.outputs.SHOULD_BUILD == 'true'
         run: |
-          # 🌟 核心防护：抹除 Windows 换行符
+          # 删除 Windows 换行符
           sed -i 's/\r$//' Auto-OpenWrt-build-x86-64.sh
           
           chmod +x Auto-OpenWrt-build-x86-64.sh
@@ -133,7 +139,7 @@ jobs:
           echo "FIRMWARE_SIZE=$FIRMWARE_SIZE" >> $GITHUB_ENV
           echo "检测到固件实际大小为: $FIRMWARE_SIZE"
           
-          # 🌟 写入带超链接的最终摘要
+          # 写入带超链接的摘要
           echo "### 🎉 编译成功" >> $GITHUB_STEP_SUMMARY
           echo "- **固件体积:** \`${FIRMWARE_SIZE}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **下载地址:** [👉 点击此处前往 Releases 页面下载固件](https://github.com/${{ github.repository }}/releases/tag/OpenWrt-Latest)" >> $GITHUB_STEP_SUMMARY
@@ -164,24 +170,36 @@ jobs:
             - **硬盘挂载**: 智能抓取 sda3 或 nvme0n1p3 动态绑定
             - **固件体积**: `${{ env.FIRMWARE_SIZE }}`
 
-      - name: 🧹 智能清理“无需更新”的运行记录
+      # 清理步骤
+      - name: 🧹 智能清理冗余运行记录
         if: always()
         run: |
-          echo "开始检索 Workflow 历史记录..."
+          echo ">>> 1. 清理所有失败的运行记录 <<<"
+          # 查找并删除所有红色的失败记录，保持列表整洁
+          FAILED_RUNS=$(gh run list --workflow "${{ github.workflow }}" --status failure --limit 50 --json databaseId | jq -r '.[].databaseId')
+          if [ -n "$FAILED_RUNS" ]; then
+            for run_id in $FAILED_RUNS; do
+              echo "🗑️ 删除失败记录 ID: $run_id"
+              gh run delete "$run_id" || true
+            done
+          else
+            echo "✅ 没有失败记录需要清理。"
+          fi
+
+          echo ">>> 2. 清理多余的“无需更新”记录 <<<"
           gh run list --workflow "${{ github.workflow }}" --status success --limit 100 --json databaseId,createdAt,updatedAt > runs.json
 
-          # 提取运行时间小于 300 秒 (5分钟) 的跳过记录，保留最近 3 个，其余准备删除
+          # 提取运行时间小于 300 秒 (5分钟) 的跳过记录，保留最近 3 个，其余删除
           TO_DELETE=$(jq -r '[.[] | select((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601) < 300)] | .[3:] | .[].databaseId' runs.json)
           
-          if [ -z "$TO_DELETE" ]; then
-            echo "✅ 目前没有多余的旧记录需要清理。"
-          else
-            echo "发现需要清理的未编译记录，开始执行删除..."
+          if [ -n "$TO_DELETE" ]; then
             for run_id in $TO_DELETE; do
               echo "🗑️ 正在删除跳过的旧记录 ID: $run_id"
-              gh run delete "$run_id"
+              gh run delete "$run_id" || true
             done
             echo "✅ 清理完成！"
+          else
+            echo "✅ 目前没有多余的旧记录需要清理。"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
