@@ -41,8 +41,6 @@ jobs:
       contents: write
     steps:
       - name: Checkout 代码
-    steps:
-      - name: Checkout 代码
         uses: actions/checkout@v4
 
       - name: 🔍 检测官方与本地版本是否一致
