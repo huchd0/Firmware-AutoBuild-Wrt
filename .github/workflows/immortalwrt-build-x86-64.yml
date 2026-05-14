@@ -27,7 +27,6 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      # 强制使用较新的 Node 环境以适配最新的 Actions
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: true 
       
     steps:
@@ -39,7 +38,6 @@ jobs:
         run: |
           if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
             echo ">>> 正在自动抓取 Docker Hub 上最新的 ImmortalWrt 标签..."
-            # 剔除 SNAPSHOT 和 纯数字开发版，允许 rc 版
             LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
             
             if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
@@ -55,7 +53,6 @@ jobs:
         run: |
           mkdir -p ${{ github.workspace }}/bin
           mkdir -p ${{ github.workspace }}/files
-          # 关键：确保 shell 脚本格式正确（去除 Windows 换行符）
           sed -i 's/\r$//' ${{ github.workspace }}/x86-64/ImmortalWrt-build-x86-64.sh
           chmod +x ${{ github.workspace }}/x86-64/ImmortalWrt-build-x86-64.sh
 
@@ -81,25 +78,27 @@ jobs:
           - 👤 **默认账号**: root
           - 🔑 **默认密码**: (空)
           
-          ### 📶 Wi-Fi 7 无线网络 (开机即用，已装 MT7925 WiFi + 蓝牙驱动)
-          - 📡 **网络名称 (SSID)**: \`mywifi7\`
-          - 🔒 **Wi-Fi密码**: \`Aa666666\`
-          - ⚙️ **频段配置**: 5GHz / 149信道 / 加密模式: sae-mixed
+          ### 💾 分区布局 (写入闪存需求)
+          - 💿 **内核分区 (Kernel)**: 64 MB
+          - 🗄️ **系统分区 (RootFS)**: ${{ inputs.profile }} MB
           
-          ### 🔌 接口定义 & 核心特性
-          - 🌐 **智能网口防冲突**: 多网口设备下 \`eth0\` 强制独立作为 **WAN口**，其余网口自动桥接为 **LAN口**。单网口设备下自动将 \`eth0\` 设为 LAN。
-          - 🚀 **全能科学网络**: 内置 OpenClash (Meta核心) + HomeProxy 双雄，附带 DDNS-GO 动态域名。
-          - 📂 **极速内网共享**: 内置 Ksmbd (更轻量高速的SMB协议网络共享工具) ，大容量磁盘(\`/dev/sda3\`)开机无损自动挂载。
-          - 🪶 **轻量防爆优化**: 无 Docker 依赖及冗余环境，系统资源极致释放，网络转发延迟更低。
-          - 🎨 **UI 界面**: 默认采用 Argon 极简主题。
-
+          ### 📶 Wi-Fi 7 无线网络 (已集成 MT7925 驱动)
+          - 📡 **名称 (SSID)**: \`mywifi7\`
+          - 🔒 **Wi-Fi密码**: \`Aa666666\`
+          - ⚙️ **配置**: 5GHz / 149信道 / sae-mixed
+          
+          ### 🔌 核心特性
+          - 🌐 **智能网口**: eth0 自动识别为 WAN，其余网口桥接为 LAN。
+          - 🚀 **插件集成**: OpenClash (Meta核心), HomeProxy, DDNS-GO, Ksmbd。
+          - 🛠️ **系统优化**: 自动挂载 sda3 大分区，支持无损扩容；内置全自动静默升级脚本。
+          - 🎨 **界面**: Argon 极简主题。
           EOF
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2.4.1
         with:
           tag_name: "${{ env.FINAL_VERSION }}-Build-${{ github.run_id }}"
-          name: "🚀 ImmortalWrt ${{ env.FINAL_VERSION }} [IP: ${{ inputs.custom_router_ip }} | Wi-Fi 7 开机即用]"
+          name: "🚀 ImmortalWrt ${{ env.FINAL_VERSION }} [IP: ${{ inputs.custom_router_ip }} | RootFS: ${{ inputs.profile }}MB]"
           body_path: "${{ github.workspace }}/router-info.md"
           files: |
             ${{ github.workspace }}/bin/targets/x86/64/*squashfs-combined-efi.img.gz
