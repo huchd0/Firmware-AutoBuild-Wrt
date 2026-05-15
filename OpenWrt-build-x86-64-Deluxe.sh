@@ -55,12 +55,14 @@ if [ -n "$ARGON_URL" ]; then
 fi
 
 # --- 🎯 抓取 NetWiz 网络向导 ---
-echo "正在获取 Netwiz 所有 APK ..."
-curl -sL https://api.github.com/repos/sdxmhs/luci-app-netwizs/releases | \
-jq -r '.[0].assets[] | select(.name | endswith(".apk")) | .browser_download_url' | \
+PKG_EXT="apk"
+echo "正在获取对应格式($PKG_EXT)的 NetWiz 组件 ..."
+mkdir -p files/root/netwiz_pkgs
+curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
+jq -r ".assets[] | select(.name | endswith(\".${PKG_EXT}\")) | .browser_download_url" | \
 while read -r url; do
-    echo "下载: $url"
-    wget -qP files/root/ "$url"
+    echo " -> 拉取: $url"
+    wget -qP files/root/netwiz_pkgs/ "$url"
 done
 
 echo "正在下载 OpenClash Meta 内核..."
@@ -260,13 +262,13 @@ if ! grep -q "bbr" /etc/sysctl.conf; then
     echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
 fi
 
-# 8. 软件源替换与离线 APK 安装
+# 8. 软件源替换与离线 APK 安装 (兼容子目录)
 if [ -d "/etc/apk/repositories.d" ]; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list
 fi
 
-apk add -q --allow-untrusted /root/*.apk
-rm -f /root/*.apk
+apk add -q --allow-untrusted /root/*.apk /root/netwiz_pkgs/*.apk 2>/dev/null || true
+rm -rf /root/*.apk /root/netwiz_pkgs
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
@@ -393,7 +395,11 @@ declare -a PKG_LIST=(
     "bash"                              # Bash 解释器
     "jq"                                # JSON 解析工具
     "curl"                              # 网络请求工具
-    "ca-bundle"                         # 根证书依赖
+    "ca-bundle"                         # 根证书精简包
+    "ca-certificates"                   # [新增] 🔐 完整权威根证书库
+    "libustream-openssl"                # [新增] 🔐 让 opkg/apk 原生支持 HTTPS 下载
+    "-wget"                             # [卸载] 阉割版 wget
+    "wget-ssl"                          # [新增] 🔐 支持 HTTPS 的完整版 wget
     "libcap"                            # 权限控制库
     "libcap-bin"                        # 权限控制工具
     "ruby"                              # Ruby 运行环境
