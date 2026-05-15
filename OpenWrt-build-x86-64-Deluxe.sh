@@ -387,6 +387,7 @@ declare -a PKG_LIST=(
     "kmod-fs-ntfs3"                     # ntfs 高性能挂载驱动
     "kmod-fs-vfat"                      # vfat 文件系统驱动
     "kmod-fs-exfat"                     # exfat 文件系统驱动
+    "luci-i18n-filemanager-zh-cn"
 
     # ⚙️ 4. 核心系统运行依赖
     "coreutils-nohup"                   # 后台运行命令支持
@@ -450,8 +451,9 @@ declare -a PKG_LIST=(
     # 🧩 8. 扩展应用插件
     "luci-app-ttyd"                     # 网页终端命令行
     "luci-i18n-ttyd-zh-cn"              # 网页终端中文包
-    "luci-app-ksmbd"                    # 内核级 SMB 共享
-    "luci-i18n-ksmbd-zh-cn"             # SMB 共享中文包
+    "luci-app-samba4"                 # 兼容性极强的 Samba4
+    "luci-i18n-samba4-zh-cn"
+    "wsdd2" 
     "luci-app-nlbwmon"                  # 网络带宽精准监控
     "luci-i18n-nlbwmon-zh-cn"           # 带宽监控中文包
     "luci-app-statistics"               # 性能统计全功能图表
