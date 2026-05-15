@@ -37,8 +37,9 @@ jobs:
         id: resolve_version
         run: |
           if [ "${{ inputs.openwrt_version }}" == "Auto" ]; then
-            echo ">>> 正在自动抓取 Docker Hub 上最新的 ImmortalWrt 标签..."
-            LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | head -n 1 | sed 's/x86-64-openwrt-//')
+            echo ">>> 正在自动抓取 Docker Hub 上绝对版本号最高的 ImmortalWrt 标签..."
+            # 引入 sort -rV 进行自然版本号倒序排列，确保 RC 或更高版本始终在最前面
+            LATEST_TAG=$(curl -sL "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | jq -r '.results[].name' | grep -v "SNAPSHOT" | grep -vE "^x86-64-openwrt-[0-9]+\.[0-9]+$" | sort -rV | head -n 1 | sed 's/x86-64-openwrt-//')
             
             if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
               echo "❌ 无法获取版本号，工作流中止。"
