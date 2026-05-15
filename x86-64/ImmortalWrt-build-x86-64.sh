@@ -44,21 +44,14 @@ FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.
 ( wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin "$FW_URL/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin" ) &
 ( wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin "$FW_URL/WIFI_RAM_CODE_MT7925_1_1.bin" ) &
 
-# 3. 下载 NetWiz 网络向导 (智能探测 apk/ipk 并后台并发拉取)
+# 3. 下载 NetWiz 网络向导
 (
-    echo "正在探测固件包管理器并获取对应格式的 NetWiz ..."
+    echo "正在拉取 NetWiz (apk与ipk全量双格式) ..."
     mkdir -p files/root/netwiz_pkgs
     
-    # 智能判定当前 ImageBuilder 使用的包管理器格式
-    if command -v apk >/dev/null 2>&1; then
-        PKG_EXT="apk"
-    else
-        PKG_EXT="ipk"
-    fi
-    
-    # 精准拉取对应后缀名 (.apk 或 .ipk) 的三个文件
+    # 修改了 jq 匹配规则：同时拉取所有以 .apk 和 .ipk 结尾的文件
     curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
-    jq -r ".assets[] | select(.name | endswith(\".\${PKG_EXT}\")) | .browser_download_url" | \
+    jq -r '.assets[] | select(.name | endswith(".apk") or endswith(".ipk")) | .browser_download_url' | \
     while read -r url; do
         wget -qP files/root/netwiz_pkgs/ "$url"
     done
