@@ -300,7 +300,6 @@ declare -a PKG_LIST=(
     "-kmod-nft-fullcone"              # 排除新版本中已废弃的模块，防止依赖报错
     
     # --- OpenClash 必需底层依赖 ---
-    "coreutils-nohup"
     "libcap"
     "libcap-bin"
     "ruby"
