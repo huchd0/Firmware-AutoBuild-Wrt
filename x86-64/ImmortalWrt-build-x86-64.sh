@@ -5,9 +5,7 @@ set -e
 # 接收 Github Actions (Docker 容器) 传来的环境变量
 # ==========================================
 ROOTFS_SIZE=${ROOTFS_SIZE:-1024}
-# 接收从 YAML 工作流中动态传入的管理 IP
 MANAGEMENT_IP=${MANAGEMENT_IP:-"192.168.100.1"}
-# 如果 YAML 里没有传拨号账号密码，默认留空
 PPPOE_ACCOUNT=${PPPOE_ACCOUNT:-""}
 PPPOE_PASSWORD=${PPPOE_PASSWORD:-""}
 
@@ -32,7 +30,7 @@ echo ">>> 2. 准备初始化文件夹结构 <<<"
 mkdir -p files/root files/etc/uci-defaults files/etc/init.d files/usr/bin files/etc/openclash/core files/lib/firmware/mediatek/mt7925
 
 echo ">>> 3. [极限并发] 核心组件多线程秒下 <<<"
-# 将所有下载任务放入后台并行执行
+# 1. 下载 OpenClash Meta 兼容版内核
 (
     wget -qO- "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-compatible.tar.gz" | tar xOvz > files/etc/openclash/core/clash_meta
     chmod +x files/etc/openclash/core/clash_meta
@@ -40,15 +38,35 @@ echo ">>> 3. [极限并发] 核心组件多线程秒下 <<<"
 ( wget -qO files/etc/openclash/GeoIP.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" ) &
 ( wget -qO files/etc/openclash/GeoSite.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" ) &
 
-# MT7925 Wi-Fi 底层核心固件
+# 2. 下载 MT7925 Wi-Fi 底层核心固件
 FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/mediatek/mt7925"
 ( wget -qO files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin "$FW_URL/BT_RAM_CODE_MT7925_1_1_hdr.bin" ) &
 ( wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin "$FW_URL/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin" ) &
 ( wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin "$FW_URL/WIFI_RAM_CODE_MT7925_1_1.bin" ) &
 
-# 挂起主线程，等待所有文件瞬间就绪
+# 3. 下载 NetWiz 网络向导 (智能探测 apk/ipk 并后台并发拉取)
+(
+    echo "正在探测固件包管理器并获取对应格式的 NetWiz ..."
+    mkdir -p files/root/netwiz_pkgs
+    
+    # 智能判定当前 ImageBuilder 使用的包管理器格式
+    if command -v apk >/dev/null 2>&1; then
+        PKG_EXT="apk"
+    else
+        PKG_EXT="ipk"
+    fi
+    
+    # 精准拉取对应后缀名 (.apk 或 .ipk) 的三个文件
+    curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
+    jq -r ".assets[] | select(.name | endswith(\".\${PKG_EXT}\")) | .browser_download_url" | \
+    while read -r url; do
+        wget -qP files/root/netwiz_pkgs/ "$url"
+    done
+) &
+
+# 挂起主线程，等待所有后台下载任务瞬间就绪
 wait
-echo "✅ 所有组件及底层驱动并发拉取完毕！"
+echo "✅ 所有组件、底层驱动及第三方插件并发拉取完毕！"
 
 echo ">>> 4. 生成开机首启初始化脚本 (精准网络与IP配置) <<<"
 cat << EOF > files/etc/uci-defaults/99-custom-setup
@@ -60,7 +78,7 @@ uci set system.@system[0].zonename='Asia/Shanghai'
 uci set system.@system[0].hostname='Tanxm'
 uci commit system
 
-# A. 基础 LAN 桥接与 IP 设置 (动态获取外部传入的IP)
+# A. 基础 LAN 桥接与 IP 设置
 uci set network.lan.ipaddr="$MANAGEMENT_IP"
 uci set network.lan.netmask='255.255.255.0'
 uci set network.lan.device='br-lan'
@@ -152,11 +170,10 @@ fi
     done
 
     if uci get wireless.radio0 >/dev/null 2>&1; then
-        # 遍历所有被识别出来的射频模块 (radio0, radio1...)
         for radio in \$(uci show wireless | grep -E '^wireless.radio[0-9]+=' | cut -d'.' -f2 | cut -d'=' -f1); do
             uci set wireless.\${radio}.country='CN'
             uci set wireless.\${radio}.cell_density='0'
-            uci set wireless.\${radio}.disabled='0'  # 0代表开启
+            uci set wireless.\${radio}.disabled='0'
 
             iface="default_\${radio}"
             if ! uci get wireless.\${iface} >/dev/null 2>&1; then
@@ -173,31 +190,39 @@ fi
             uci set wireless.\${iface}.disabled='0'
         done
         
-        # 强制指定核心 5G 频段参数
         uci set wireless.radio0.band='5g'
         uci set wireless.radio0.channel='149'
         
-        # 如果硬件同时映射了 2.4G 频段到 radio1，设置兼容信道防系统崩溃
         if uci get wireless.radio1 >/dev/null 2>&1; then
             uci set wireless.radio1.band='2g'
             uci set wireless.radio1.channel='1'
         fi
 
         uci commit wireless
-        # 配置完后，无缝重启无线服务使配置立即生效
         wifi reload
     fi
 ) &
+
+# F. 自动安装本地 NetWiz 插件
+if [ -d "/root/netwiz_pkgs" ]; then
+    # 根据系统包管理器，精准匹配对应的文件后缀进行安装
+    if command -v apk >/dev/null 2>&1; then
+        apk add --allow-untrusted /root/netwiz_pkgs/*.apk >/dev/null 2>&1
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg install /root/netwiz_pkgs/*.ipk --force-depends >/dev/null 2>&1 || true
+    fi
+    # 阅后即焚，清理安装包释放空间
+    rm -rf /root/netwiz_pkgs
+fi
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-custom-setup
 
-# F. 全自动静默升级与定时任务 (双引擎自适应版)
+# G. 全自动静默升级与定时任务 (双引擎自适应版)
 echo "正在生成自动升级脚本与定时任务..."
 
-# 🌟 创建目录
 mkdir -p files/usr/bin
 
 cat << 'EOF_UPGRADE' > files/usr/bin/upg
@@ -210,7 +235,6 @@ fi
 
 echo "===== Auto Upgrade Start: $(date) =====" >> "$LOGFILE"
 
-# 1. 嗅探当前环境
 if command -v apk >/dev/null 2>&1; then
     PKG_ENGINE="apk"
     openclash_before=$(apk info -v luci-app-openclash 2>/dev/null)
@@ -224,15 +248,12 @@ fi
 
 echo "使用 $PKG_ENGINE 引擎执行升级..." >> "$LOGFILE"
 
-# 2. 根据引擎执行相应的安全升级逻辑
 if [ "$PKG_ENGINE" = "apk" ]; then
     apk update >> "$LOGFILE" 2>&1
-    # 获取可升级列表，提取包名并过滤掉敏感的内核与底层包
     apk list -u 2>/dev/null | awk '{print $1}' | sed -E 's/-[0-9]+.*//' | while read -r pkg; do
         if [ -z "$pkg" ]; then continue; fi
         case "$pkg" in
             base-files|busybox|dnsmasq*|dropbear|firewall*|fstools|kernel|kmod-*|libc|luci|mtd|procd|uhttpd)
-                # 核心底层包，跳过
                 ;;
             *)
                 echo "升级: $pkg" >> "$LOGFILE"
@@ -247,7 +268,6 @@ elif [ "$PKG_ENGINE" = "opkg" ]; then
     for pkg in $(opkg list-upgradable | awk '{print $1}'); do
         case "$pkg" in
             base-files|busybox|dnsmasq*|dropbear|firewall*|fstools|kernel|kmod-*|libc|luci|mtd|opkg|procd|uhttpd)
-                # 核心底层包，跳过
                 ;;
             *)
                 echo "升级: $pkg" >> "$LOGFILE"
@@ -258,7 +278,6 @@ elif [ "$PKG_ENGINE" = "opkg" ]; then
     openclash_after=$(opkg list-installed luci-app-openclash 2>/dev/null)
 fi
 
-# 3. OpenClash 守护重启逻辑
 if [ -n "$openclash_before" ] && [ "$openclash_before" != "$openclash_after" ]; then
     echo "OpenClash 已升级 ($openclash_before -> $openclash_after)，正在重启服务..." >> "$LOGFILE"
     /etc/init.d/openclash restart >> "$LOGFILE" 2>&1
@@ -270,64 +289,87 @@ EOF_UPGRADE
 chmod +x files/usr/bin/upg
 mkdir -p files/etc/crontabs
 
-# 写入定时任务 (注意结尾加换行，有些 crond 实现很挑剔)
 echo "0 2 */2 * * /usr/bin/upg" > files/etc/crontabs/root
 echo "" >> files/etc/crontabs/root
-
-# 🎯 赋予 crontab 正确的安全权限 (600)，否则计划任务会失效
 chmod 0600 files/etc/crontabs/root
 
 echo ">>> 5. 组装极简与指定软件包列表 <<<"
 declare -a PKG_LIST=(
+    "-dnsmasq"                        # 明确剔除基础版 dnsmasq
+    "dnsmasq-full"                    # 强制安装全功能版 (OpenClash 必需)
+    "-kmod-nft-fullcone"              # 排除新版本中已废弃的模块，防止依赖报错
+    
+    # --- OpenClash 必需底层依赖 ---
+    "coreutils-nohup"
+    "libcap"
+    "libcap-bin"
+    "ruby"
+    "ruby-yaml"
+    
+    # --- 🔐 核心 SSL 与证书支持 (确保 opkg 可用 HTTPS 源) ---
+    "ca-bundle"                       # 根证书集合包
+    "ca-certificates"                 # 基础 CA 证书
+    "libustream-openssl"              # uclient-fetch 的 OpenSSL 支持库 (opkg 必需)
+    
     # --- 系统基础与界面 ---
-    "luci-i18n-base-zh-cn"            # 基础中文包
-    "luci-i18n-firewall-zh-cn"        # 防火墙中文
-    "luci-i18n-package-manager-zh-cn" # 软件包管理器中文
-    "luci-i18n-ttyd-zh-cn"            # 网页终端中文
-    "luci-theme-argon"                # Argon 极简主题
+    "luci"
+    "luci-base"
+    "luci-compat"
+    "luci-i18n-base-zh-cn"
+    "luci-i18n-firewall-zh-cn"
+    "luci-i18n-package-manager-zh-cn"
+    "luci-i18n-ttyd-zh-cn"
+    "luci-theme-argon"
     
     # --- 磁盘与文件系统 ---
-    "luci-i18n-diskman-zh-cn"         # 磁盘管理中文
-    "block-mount"                     # 挂载基础组件
-    "fdisk"                           # 分区工具
-    "parted"                          # 高级分区工具
-    "lsblk"                           # 块设备查看
-    "e2fsprogs"                       # ext4文件系统工具
-    "kmod-fs-ext4"                    # ext4内核模块
-    "kmod-fs-ntfs3"                   # ntfs3内核模块
-    "kmod-fs-exfat"                   # exfat内核模块
-    "kmod-usb-storage-uas"            # USB存储加速驱动
+    "luci-i18n-diskman-zh-cn"
+    "block-mount"
+    "fdisk"
+    "parted"
+    "lsblk"
+    "e2fsprogs"
+    "kmod-fs-ext4"
+    "kmod-fs-ntfs3"
+    "kmod-fs-exfat"
+    "kmod-usb-storage-uas"
     
-    # --- 命令行与网络工具 ---
-    "bash"                            # 增强型命令行
-    "curl"                            # 网络请求工具
-    "jq"                              # JSON处理工具
-    "unzip"                           # 解压工具
-    "nano"                            # 文本编辑器
-    "htop"                            # 性能监控工具
-    "tcpdump"                         # 抓包工具
-    "mtr"                             # 路由追踪工具
-    "iwinfo"                          # 无线信息工具
-    "script-utils"                    # 脚本辅助工具
+    # --- 命令行与网络诊断工具 (全能版) ---
+    "bash"
+    "curl"
+    "jq"
+    "unzip"
+    "nano"
+    "htop"
+    "tcpdump"
+    "mtr"
+    "iwinfo"
+    "script-utils"
+    "iperf3"                          # 局域网/Wi-Fi极限测速
+    "ethtool"                         # 网口物理状态查询
+    "pciutils"                        # lspci (排查 PCIe)
+    "usbutils"                        # lsusb (排查 USB/蓝牙)
+    "bind-dig"                        # DNS 诊断工具
+    "lsof"                            # 端口占用查询
     
     # --- 核心网络插件 ---
-    "luci-app-openclash"              # 科学网络 OpenClash
-    "luci-i18n-homeproxy-zh-cn"       # 科学网络 HomeProxy 中文
-    "luci-i18n-ddns-go-zh-cn"         # 动态域名 DDNS-GO 中文
+    "luci-app-openclash"
+    "luci-i18n-homeproxy-zh-cn"
+    "luci-i18n-ddns-go-zh-cn"
     
     # --- 文件共享与传输 ---
-    "luci-i18n-filemanager-zh-cn"     # 文件管理中文
-    "luci-app-ksmbd"                  # 高速 SMB 共享
-    "luci-i18n-ksmbd-zh-cn"           # 高速 SMB 共享中文
-    "openssh-sftp-server"             # SFTP 文件传输
+    "luci-i18n-filemanager-zh-cn"
+    "luci-app-samba4"                 # 兼容性极强的 Samba4
+    "luci-i18n-samba4-zh-cn"
+    "wsdd2"                           # Windows 10/11 网络邻居自动发现神器
+    "openssh-sftp-server"
     
     # --- MT7925 硬件驱动 ---
-    "kmod-mt7925e"                    # MT7925 PCIe 驱动
-    "wpad-openssl"                    # WPA 认证组件
-    "kmod-btusb"                      # 蓝牙 USB 驱动
-    "bluez-daemon"                    # 蓝牙守护进程
-    "kmod-input-uinput"               # 用户输入模块
-    "kmod-mt7925-firmware"            # MT7925 核心固件
+    "kmod-mt7925e"
+    "wpad-openssl"
+    "kmod-btusb"
+    "bluez-daemon"
+    "kmod-input-uinput"
+    "kmod-mt7925-firmware"
 )
 
 # 转换数组为字符串传递给打包引擎
