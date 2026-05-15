@@ -358,9 +358,6 @@ declare -a PKG_LIST=(
     # --- MT7925 硬件驱动 ---
     "kmod-mt7925e"
     "wpad-openssl"
-    "kmod-btusb"
-    "bluez-daemon"
-    "kmod-input-uinput"
     "kmod-mt7925-firmware"
 )
 
