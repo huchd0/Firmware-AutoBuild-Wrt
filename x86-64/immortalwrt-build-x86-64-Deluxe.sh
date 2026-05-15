@@ -467,8 +467,9 @@ PKG_LUCI_APPS=(
     "luci-app-homeproxy"               # HomeProxy 科学上网客户端（备用/轻量选择）
     "luci-i18n-homeproxy-zh-cn"        # HomeProxy 中文包
     "luci-theme-argon"                 # 最受欢迎的 Argon 漂亮主题
-    "luci-app-ksmbd"                   # 苹果/Windows 网络共享 (性能比旧版 Samba4 更高)
-    "luci-i18n-ksmbd-zh-cn"            # Ksmbd 中文包
+    "luci-app-samba4"                 # 兼容性极强的 Samba4
+    "luci-i18n-samba4-zh-cn"
+    "wsdd2" 
     "luci-app-statistics"              # 酷炫的路由器性能/流量监控图表
     "luci-i18n-statistics-zh-cn"       # 监控图表中文包
     "luci-app-autoreboot"              # 计划任务：定时重启路由器
