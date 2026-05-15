@@ -27,8 +27,8 @@ echo ">>> 2. 准备初始化文件夹 <<<"
 mkdir -p files/root
 mkdir -p files/etc/uci-defaults
 
-echo ">>> 3. 下载第三方插件与 OpenClash 核心 (智能适配 IPK/APK) <<<"
-# 自动判断当前编译的是新版(apk)还是旧版(ipk)
+echo ">>> 3. 下载第三方插件与核心 (智能适配 IPK/APK) <<<"
+# 判断当前编译的是新版(apk)还是旧版(ipk)
 if [[ "$OWRT_VERSION" == *"24.10"* ]] || [[ "$OWRT_VERSION" == *"25."* ]] || [[ "$OWRT_VERSION" == *"SNAPSHOT"* ]]; then
     PKG_EXT="apk"
 else
@@ -36,19 +36,31 @@ else
 fi
 echo "当前 OpenWrt 版本为 $OWRT_VERSION，使用包后缀: $PKG_EXT"
 
+# 下载 OpenClash
 OPENCLASH_URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases | grep -m 1 "browser_download_url.*\.${PKG_EXT}" | cut -d '"' -f 4)
 if [ -n "$OPENCLASH_URL" ]; then
     echo "正在下载 OpenClash..."
     wget -qO files/root/luci-app-openclash.${PKG_EXT} "$OPENCLASH_URL"
 fi
 
+# 下载 Argon 主题
 ARGON_URL=$(curl -s https://api.github.com/repos/jerrykuku/luci-theme-argon/releases | grep -m 1 "browser_download_url.*\.${PKG_EXT}" | cut -d '"' -f 4)
 if [ -n "$ARGON_URL" ]; then
     echo "正在下载 Argon 主题..."
     wget -qO files/root/luci-theme-argon.${PKG_EXT} "$ARGON_URL"
 fi
 
-# 提前下载并注入 OpenClash Meta 兼容版内核
+# 下载 NetWiz 网络向导
+echo "正在获取对应格式($PKG_EXT)的 NetWiz 组件 ..."
+mkdir -p files/root/netwiz_pkgs
+curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
+jq -r ".assets[] | select(.name | endswith(\".${PKG_EXT}\")) | .browser_download_url" | \
+while read -r url; do
+    echo " -> 拉取: $url"
+    wget -qP files/root/netwiz_pkgs/ "$url"
+done
+
+# 注入 OpenClash Meta 兼容版内核
 echo "正在下载 OpenClash Meta 兼容版内核..."
 mkdir -p files/etc/openclash/core
 wget -qO files/etc/openclash/core/meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-compatible.tar.gz"
@@ -56,6 +68,7 @@ tar -zxf files/etc/openclash/core/meta.tar.gz -C files/etc/openclash/core/
 mv files/etc/openclash/core/clash files/etc/openclash/core/clash_meta
 chmod +x files/etc/openclash/core/clash_meta
 rm -f files/etc/openclash/core/meta.tar.gz
+
 
 echo ">>> 4. 编写全自动开机初始化脚本 <<<"
 cat << EOF > files/etc/uci-defaults/99-custom-setup
@@ -123,7 +136,7 @@ if [ -n "\$TARGET_DEV" ]; then
     fi
 fi
 
-# --- D. 软件源换源与双引擎插件安装 ---
+# --- D. 软件源换源与基础插件安装 ---
 if command -v apk >/dev/null 2>&1; then
     sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' /etc/apk/repositories.d/*.list 2>/dev/null
     apk add -q --allow-untrusted /root/*.apk
@@ -132,6 +145,18 @@ elif command -v opkg >/dev/null 2>&1; then
     opkg install /root/*.ipk
 fi
 rm -f /root/*.apk /root/*.ipk
+
+# --- F. 自动安装本地 NetWiz 插件 ---
+if [ -d "/root/netwiz_pkgs" ]; then
+    echo "正在安装 NetWiz 插件..." > /dev/console
+    if command -v apk >/dev/null 2>&1; then
+        apk add -q --allow-untrusted /root/netwiz_pkgs/*.apk >/dev/null 2>&1 || true
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg install /root/netwiz_pkgs/*.ipk --force-depends >/dev/null 2>&1 || true
+    fi
+    # 阅后即焚，清理安装包释放空间
+    rm -rf /root/netwiz_pkgs
+fi
 
 rm -f /etc/uci-defaults/99-custom-setup
 exit 0
@@ -237,8 +262,10 @@ declare -a PKG_LIST=(
     # 🔌 3. 实用功能插件
     "luci-app-ttyd"                     # 网页版命令行终端
     "luci-i18n-ttyd-zh-cn"              # 终端中文包
-    "luci-app-ksmbd"                    # 局域网文件共享
-    "luci-i18n-ksmbd-zh-cn"             # 共享中文包
+    "luci-i18n-filemanager-zh-cn"
+    "luci-app-samba4"                 # 兼容性极强的 Samba4
+    "luci-i18n-samba4-zh-cn"
+    "wsdd2" 
 
     # 💾 4. 磁盘管理与分区工具 (扩容与 Docker 必备)
     "block-mount"                       # 自动挂载工具
@@ -255,11 +282,13 @@ declare -a PKG_LIST=(
     "kmod-fs-ntfs3"                     # NTFS 格式支持
     "kmod-fs-vfat"                      # FAT/FAT32 格式支持
 
-    # ⚙️ 6. 核心底层依赖 (OpenClash 等代理插件所需)
+    # ⚙️ 6. 核心底层依赖 (解决 opkg SSL/HTTPS 报错，代理插件所需)
     "coreutils-nohup"                   # 后台运行支持
     "bash"                              # 强大的终端 Shell
     "curl"                              # 网络请求下载工具
     "ca-bundle"                         # 根证书 (HTTPS必备)
+    "ca-certificates"                   # CA 证书合集 (确保 opkg/apk 支持 SSL)
+    "libustream-openssl"                # OpenSSL 数据流 (解决 opkg https 下载报错)
     "ip-full"                           # 完整版 IP 路由控制
     "iptables-mod-tproxy"               # iptables 透明代理模块
     "iptables-mod-extra"                # iptables 额外模块
