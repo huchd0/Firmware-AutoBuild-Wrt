@@ -49,10 +49,9 @@ FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.
     echo "正在拉取 NetWiz (apk与ipk全量双格式) ..."
     mkdir -p files/root/netwiz_pkgs
     
-    BASE_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
-    PROXY_URL="https://ghp.ci" # 使用国内加速节点防断连
+    BASE_URL="https://github.com/sdxmhs/luci-app-netwiz/releases/latest/download"
     
-    # 精准拉取你指定的 6 个文件 (注意这里的换行语法去掉了分号)
+    # 精准拉取你指定的 6 个文件
     for FILE in \
         apk_luci-app-netwiz.apk \
         apk_luci-i18n-netwiz-zh-cn.apk \
@@ -61,8 +60,8 @@ FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.
         ipk_luci-i18n-netwiz-zh-cn.ipk \
         ipk_luci-i18n-netwiz-zh-tw.ipk
     do
-        # 优先使用加速节点，失败则尝试官方直连
-        wget -qP files/root/netwiz_pkgs/ "$PROXY_URL/$BASE_URL/$FILE" || wget -qP files/root/netwiz_pkgs/ "$BASE_URL/$FILE"
+        # 直接使用 GitHub 官方直链下载
+        wget -qP files/root/netwiz_pkgs/ "$BASE_URL/$FILE"
     done
 ) &
 
