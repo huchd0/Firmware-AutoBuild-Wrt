@@ -27,7 +27,7 @@ on:
       app_homeproxy:
         description: "🛡️ HomeProxy (轻量代理工具)"
         type: boolean
-        default: false
+        default: true
       app_openclash:
         description: "🔌 OpenClash (全能代理工具)"
         type: boolean
@@ -36,8 +36,8 @@ on:
         description: "🚀 PassWall (经典的代理工具)"
         type: boolean
         default: false
-      app_ksmbd:
-        description: "📁 KSMBD (内网共享文件)"
+      app_Samba4:
+        description: "📁 Samba4 (内网共享文件)"
         type: boolean
         default: true
 
@@ -45,7 +45,7 @@ on:
       app_wechatpush:
         description: "🔔 WeChatPush (微信通知发送)"
         type: boolean
-        default: true
+        default: false
       app_diskman:
         description: "💽 Diskman (分区和格式化硬盘)"
         type: boolean
