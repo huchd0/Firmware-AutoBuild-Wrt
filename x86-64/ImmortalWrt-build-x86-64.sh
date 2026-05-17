@@ -49,11 +49,20 @@ FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.
     echo "正在拉取 NetWiz (apk与ipk全量双格式) ..."
     mkdir -p files/root/netwiz_pkgs
     
-    # 修改了 jq 匹配规则：同时拉取所有以 .apk 和 .ipk 结尾的文件
-    curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
-    jq -r '.assets[] | select(.name | endswith(".apk") or endswith(".ipk")) | .browser_download_url' | \
-    while read -r url; do
-        wget -qP files/root/netwiz_pkgs/ "$url"
+    BASE_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
+    PROXY_URL="https://ghp.ci" # 使用你脚本里的国内加速节点防断连
+    
+    # 精准拉取你指定的 6 个文件
+    for FILE in \
+        apk_luci-app-netwiz.apk \
+        apk_luci-i18n-netwiz-zh-cn.apk \
+        apk_luci-i18n-netwiz-zh-tw.apk \
+        ipk_luci-app-netwiz.ipk \
+        ipk_luci-i18n-netwiz-zh-cn.ipk \
+        ipk_luci-i18n-netwiz-zh-tw.ipk
+    ; do
+        # 优先使用加速节点，失败则尝试官方直连
+        wget -qP files/root/netwiz_pkgs/ "$PROXY_URL/$BASE_URL/$FILE" || wget -qP files/root/netwiz_pkgs/ "$BASE_URL/$FILE"
     done
 ) &
 
@@ -196,16 +205,24 @@ fi
     fi
 ) &
 
-# F. 自动安装本地 NetWiz 插件
+# F. 自动安装本地 NetWiz 插件并生成日志
 if [ -d "/root/netwiz_pkgs" ]; then
-    # 根据系统包管理器，精准匹配对应的文件后缀进行安装
+    echo "=== 开始安装 NetWiz ===" > /root/netwiz_install.log
+    
+    # 1. 匹配系统包管理器并保留报错日志以便排查
     if command -v apk >/dev/null 2>&1; then
-        apk add --allow-untrusted /root/netwiz_pkgs/*.apk >/dev/null 2>&1
+        apk add --allow-untrusted /root/netwiz_pkgs/*.apk >> /root/netwiz_install.log 2>&1
     elif command -v opkg >/dev/null 2>&1; then
-        opkg install /root/netwiz_pkgs/*.ipk --force-depends >/dev/null 2>&1 || true
+        opkg install /root/netwiz_pkgs/*.ipk --force-depends >> /root/netwiz_install.log 2>&1 || true
     fi
-    # 阅后即焚，清理安装包释放空间
+    
+    # 2. 清理 LuCI 缓存并重载守护进程，菜单才会出现！
+    rm -rf /tmp/luci-indexcache /tmp/luci-modulecache/ /var/run/luci-indexcache /var/run/luci-modulecache/ 2>/dev/null
+    /etc/init.d/rpcd reload 2>/dev/null
+    
+    # 3. 阅后即焚
     rm -rf /root/netwiz_pkgs
+    echo "=== 安装流程结束 ===" >> /root/netwiz_install.log
 fi
 
 rm -f /etc/uci-defaults/99-custom-setup
