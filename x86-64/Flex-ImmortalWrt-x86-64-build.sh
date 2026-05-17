@@ -141,7 +141,7 @@ BASE_PACKAGES="$BASE_PACKAGES collectd collectd-mod-cpu collectd-mod-interface c
 
 # 💾 NAS 存储 & 下载工具
 [ "$APP_DISKMAN" = "true" ]   && BASE_PACKAGES="$BASE_PACKAGES luci-app-diskman luci-i18n-diskman-zh-cn"
-[ "$APP_KSMBD" = "true" ]     && BASE_PACKAGES="$BASE_PACKAGES luci-app-ksmbd luci-i18n-ksmbd-zh-cn"
+[ "$APP_Samba4" = "true" ]     && BASE_PACKAGES="$BASE_PACKAGES luci-app-samba4 luci-i18n-samba4-zh-cn"
 [ "$APP_ALIST" = "true" ]     && BASE_PACKAGES="$BASE_PACKAGES luci-app-alist"
 [ "$APP_QBITTORRENT" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-qbittorrent luci-i18n-qbittorrent-zh-cn"
 
