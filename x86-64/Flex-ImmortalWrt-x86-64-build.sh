@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # =========================================================
-# 0. OpenClash 核心预备
+# 0. 云端预处理：插件核心预备
 # =========================================================
+# --- 0.1 下载 OpenClash 核心 ---
 mkdir -p files/etc/openclash/core
 if [ "$APP_OPENCLASH" = "true" ]; then
     echo ">>> 正在下载 OpenClash 兼容版核心..."
@@ -14,6 +15,17 @@ if [ "$APP_OPENCLASH" = "true" ]; then
         rm -f meta.tar.gz
     fi
 fi
+
+# --- 0.2 下载 NetWiz 网络向导安装包 ---
+echo ">>> 正在获取 NetWiz 网络向导组件..."
+mkdir -p files/root/netwiz_pkgs
+# 智能抓取，兼容 apk 和 ipk 两种时代格式，并摒弃对 jq 的依赖防报错
+curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
+grep -o '"browser_download_url": "[^"]*"' | cut -d'"' -f4 | grep -E '\.(apk|ipk)$' | \
+while read -r url; do
+    echo " -> 拉取: $url"
+    wget -qP files/root/netwiz_pkgs/ "$url"
+done
 
 # =========================================================
 # 1. 初始化脚本 (开机自启核心逻辑)
@@ -54,6 +66,7 @@ fi
 # --- C. 数据存储重定向 (Collectd) ---
 mkdir -p /mnt/sda3/collectd_rrd
 chmod 777 /mnt/sda3/collectd_rrd
+uci -q delete statistics.collectd.Datadir 2>/dev/null || true
 uci set luci_statistics.collectd_rrdtool.DataDir='/mnt/sda3/collectd_rrd'
 uci commit luci_statistics
 /etc/init.d/luci_statistics restart >/dev/null 2>&1 &
@@ -99,6 +112,18 @@ if [ "\$ETH_COUNT" -gt 0 ]; then
     fi
     uci commit network
 fi
+
+# --- E. 自动安装本地 NetWiz 插件并清理 ---
+if [ -d "/root/netwiz_pkgs" ]; then
+    echo "正在安装 NetWiz 插件..." > /dev/console
+    if command -v apk >/dev/null 2>&1; then
+        apk add -q --allow-untrusted /root/netwiz_pkgs/*.apk >/dev/null 2>&1 || true
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg install /root/netwiz_pkgs/*.ipk --force-depends >/dev/null 2>&1 || true
+    fi
+    # 阅后即焚，清理安装包释放空间
+    rm -rf /root/netwiz_pkgs
+fi
 EOF
 
 # =========================================================
@@ -141,7 +166,7 @@ BASE_PACKAGES="$BASE_PACKAGES collectd collectd-mod-cpu collectd-mod-interface c
 
 # 💾 NAS 存储 & 下载工具
 [ "$APP_DISKMAN" = "true" ]   && BASE_PACKAGES="$BASE_PACKAGES luci-app-diskman luci-i18n-diskman-zh-cn"
-[ "$APP_Samba4" = "true" ]     && BASE_PACKAGES="$BASE_PACKAGES luci-app-samba4 luci-i18n-samba4-zh-cn"
+[ "$APP_Samba4" = "true" ]    && BASE_PACKAGES="$BASE_PACKAGES luci-app-samba4 luci-i18n-samba4-zh-cn"
 [ "$APP_ALIST" = "true" ]     && BASE_PACKAGES="$BASE_PACKAGES luci-app-alist"
 [ "$APP_QBITTORRENT" = "true" ] && BASE_PACKAGES="$BASE_PACKAGES luci-app-qbittorrent luci-i18n-qbittorrent-zh-cn"
 
