@@ -306,9 +306,17 @@ declare -a PKG_LIST=(
     "luci-i18n-upnp-zh-cn"              # 开关 UPnP中文
     "miniupnpd-nftables"                # 硬件/软件流量卸载、UPnP后台服务
     
-    # 💻 7. 物理网卡驱动 & 无线工具
+    # 💻 7. 网卡驱动 & 无线与蓝牙底层
     "kmod-igc"                          # Intel i225/i226 2.5G 网卡驱动
     "iwinfo"                            # 无线网络信息查看工具
+    "-wpad-basic-mbedtls"               # [卸载] 简配版 WPA 认证
+    "-wpad-basic-wolfssl"               # [卸载] 简配版 WPA 认证
+    "wpad-openssl"                      # [安装] 完整版 WPA3 认证
+    "kmod-mt7925e"                      # MT7925 PCIe 驱动
+    "kmod-mt7925-firmware"              # MT7925 固件支持
+    "kmod-btusb"                        # 蓝牙 USB 底层驱动
+    "bluez-daemon"                      # 蓝牙协议栈守护
+    "kmod-input-uinput"                 # 蓝牙输入设备驱动
 )
 
 PACKAGES="${PKG_LIST[*]}"
