@@ -49,7 +49,7 @@ FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.
     echo "正在拉取 NetWiz (apk与ipk全量双格式) ..."
     mkdir -p files/root/netwiz_pkgs
     
-    BASE_URL="https://github.com/sdxmhs/luci-app-netwiz/releases/latest/download"
+    BASE_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
     
     # 精准拉取你指定的 6 个文件
     for FILE in \
