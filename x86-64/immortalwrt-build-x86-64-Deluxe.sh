@@ -22,7 +22,7 @@ echo "CONFIG_VDI_IMAGES=n" >> .config
 echo "CONFIG_VHDX_IMAGES=n" >> .config
 echo "CONFIG_QCOW2_IMAGES=n" >> .config
 echo "CONFIG_ISO_IMAGES=n" >> .config
-echo "CONFIG_GRUB_IMAGES=n" >> .config
+# echo "CONFIG_GRUB_IMAGES=n" >> .config
 
 echo "=== 2. 准备初始化文件夹 ==="
 mkdir -p files/etc/uci-defaults
