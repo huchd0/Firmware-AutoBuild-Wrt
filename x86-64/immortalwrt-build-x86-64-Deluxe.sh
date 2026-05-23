@@ -427,7 +427,6 @@ PKG_DISK=(
 
 # --- 3. 脚本、系统工具与依赖库 ---
 PKG_DEPENDS=(
-    "coreutils-nohup"                  # 允许命令在后台静默运行
     "bash"                             # 行业标准的 Shell 终端环境
     "jq"                               # JSON 数据解析工具（各种脚本必备）
     "curl"                             # 强大的网络请求下载工具
