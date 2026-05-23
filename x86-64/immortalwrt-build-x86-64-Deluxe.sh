@@ -22,7 +22,7 @@ echo "CONFIG_VDI_IMAGES=n" >> .config
 echo "CONFIG_VHDX_IMAGES=n" >> .config
 echo "CONFIG_QCOW2_IMAGES=n" >> .config
 echo "CONFIG_ISO_IMAGES=n" >> .config
-# echo "CONFIG_GRUB_IMAGES=n" >> .config
+echo "CONFIG_GRUB_IMAGES=n" >> .config
 
 echo "=== 2. 准备初始化文件夹 ==="
 mkdir -p files/etc/uci-defaults
@@ -140,69 +140,35 @@ else
 fi
 uci commit network
 
-# --- C. 🎯 智能大分区强制挂载保护 (彻底解除 GPT 封印 + 无损数据挂载) ---
-ROOT_DEV=""
-for dev in /dev/nvme0n1 /dev/sda /dev/vda /dev/mmcblk0; do
-    if [ -b "\$dev" ]; then
-        ROOT_DEV="\$dev"
-        break
+# --- C. 智能大分区强制挂载保护 ---
+if ! lsblk | grep -q sda3; then
+    echo -e "w" | fdisk /dev/sda >/dev/null 2>&1
+    echo -e "n\n3\n\n\nw" | fdisk /dev/sda >/dev/null 2>&1
+    partprobe /dev/sda >/dev/null 2>&1 || true
+    sleep 3
+    if lsblk | grep -q sda3; then
+        mkfs.ext4 -F /dev/sda3 >/dev/null 2>&1
     fi
-done
+fi
 
-if [ -n "\$ROOT_DEV" ]; then
-    if [[ "\$ROOT_DEV" == *nvme* ]] || [[ "\$ROOT_DEV" == *mmcblk* ]]; then
-        PART_DEV="\${ROOT_DEV}p3"
-    else
-        PART_DEV="\${ROOT_DEV}3"
-    fi
-
-    # 1. 破除 GPT 封印并强行建立第 3 分区
-    if [ ! -b "\$PART_DEV" ]; then
-        # 解除 1024MB 封印，将 GPT 备份头移至物理硬盘的真实末尾
-        sgdisk -e "\$ROOT_DEV" >/dev/null 2>&1
-        # 盲建分区3：使用全部剩余空间，类型标记为 Linux (8300)
-        sgdisk -n 3:0:0 -t 3:8300 "\$ROOT_DEV" >/dev/null 2>&1
-        
-        # 强迫内核重新读取底层分区表
-        partx -a "\$ROOT_DEV" >/dev/null 2>&1 || true
-        partprobe "\$ROOT_DEV" >/dev/null 2>&1 || true
-        sleep 3
-    fi
-
-    # 2. 🛡️ 无损护盾核心：只格式化纯白盘，绝对不碰有数据的盘
-    if [ -b "\$PART_DEV" ]; then
-        # 嗅探该分区底层是否有 ext4/ntfs 等文件系统特征
-        FSTYPE=\$(blkid -s TYPE -o value "\$PART_DEV" 2>/dev/null)
-        
-        # 如果什么都没闻出来，说明是第一次分配的空白盘，直接格式化
-        if [ -z "\$FSTYPE" ]; then
-            mkfs.ext4 -F "\$PART_DEV" >/dev/null 2>&1
-        fi
-
-        # 3. 提取 UUID 并注册到 fstab 开机自启挂载列表中
-        TARGET_UUID=\$(blkid -s UUID -o value "\$PART_DEV" 2>/dev/null)
-        if [ -n "\$TARGET_UUID" ]; then
-            echo "config 'global'" > /etc/config/fstab
-            echo "  option  anon_swap   '0'" >> /etc/config/fstab
-            echo "  option  anon_mount  '0'" >> /etc/config/fstab
-            echo "  option  auto_swap   '1'" >> /etc/config/fstab
-            echo "  option  auto_mount  '1'" >> /etc/config/fstab
-            echo "  option  delay_root  '5'" >> /etc/config/fstab
-            echo "  option  check_fs    '0'" >> /etc/config/fstab
-            
-            # 清理系统默认可能残留的干扰挂载点
-            while uci -q delete fstab.@mount[0] 2>/dev/null; do :; done
-            
-            uci add fstab mount
-            uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
-            uci set fstab.@mount[-1].target='/mnt/sda3'
-            uci set fstab.@mount[-1].enabled='1'
-            uci commit fstab
-            
-            mkdir -p /mnt/sda3
-            mount "\$PART_DEV" /mnt/sda3 2>/dev/null || true
-        fi
-    fi
+TARGET_UUID=\$(blkid -s UUID -o value /dev/sda3 2>/dev/null)
+if [ -n "\$TARGET_UUID" ]; then
+    echo "config 'global'" > /etc/config/fstab
+    echo "  option  anon_swap   '0'" >> /etc/config/fstab
+    echo "  option  anon_mount  '0'" >> /etc/config/fstab
+    echo "  option  auto_swap   '1'" >> /etc/config/fstab
+    echo "  option  auto_mount  '1'" >> /etc/config/fstab
+    echo "  option  delay_root  '5'" >> /etc/config/fstab
+    echo "  option  check_fs    '0'" >> /etc/config/fstab
+    
+    uci add fstab mount
+    uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
+    uci set fstab.@mount[-1].target='/mnt/sda3'
+    uci set fstab.@mount[-1].enabled='1'
+    uci commit fstab
+    
+    mkdir -p /mnt/sda3
+    mount /dev/sda3 /mnt/sda3 2>/dev/null || true
 fi
 
 # --- D. 性能监控图表修复 ---
@@ -395,6 +361,8 @@ echo "=== 5. 配置 ImmortalWrt 专属软件列表 ==="
 
 # --- 1. 核心系统与基础 UI ---
 PKG_CORE=(
+    "-dnsmasq"                         # 排除基础版 dnsmasq
+    "-dnsmasq-default"                 # 排除默认 dnsmasq 配置
     "dnsmasq-full"                     # 替换为全功能版（科学上网、透明代理必需支持）
     "luci"                             # 路由器 Web 管理后台主程序
     "luci-base"                        # Luci 基础依赖
@@ -411,7 +379,6 @@ PKG_DISK=(
     "lsblk"                            # 树状显示磁盘列表
     "parted"                           # 高级磁盘分区工具
     "fdisk"                            # 基础磁盘分区工具
-    "gdisk"                            # 🎯 新增: GPT 分区表管理神器 (解封 GPT 必备)
     "e2fsprogs"                        # ext4 文件系统格式化与修复工具 (mkfs.ext4)
     "kmod-usb-storage"                 # USB 存储设备基础驱动
     "kmod-usb-storage-uas"             # USB 3.0 UASP 高速协议加速驱动（防掉盘、提速）
@@ -425,6 +392,7 @@ PKG_DISK=(
 
 # --- 3. 脚本、系统工具与依赖库 ---
 PKG_DEPENDS=(
+    "coreutils-nohup"                  # 允许命令在后台静默运行
     "bash"                             # 行业标准的 Shell 终端环境
     "jq"                               # JSON 数据解析工具（各种脚本必备）
     "curl"                             # 强大的网络请求下载工具
