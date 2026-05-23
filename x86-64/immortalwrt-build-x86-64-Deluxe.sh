@@ -428,7 +428,6 @@ PKG_WIFI_BT=(
     "wpad-openssl"                     # 强制使用性能最强、最全能的 OpenSSL 加密（Wi-Fi 核心）
     "kmod-mt7925e"                     # 联发科 MT7925 Wi-Fi 7 PCI-E 网卡驱动
     "kmod-mt7925-firmware"             # MT7925 底层固件
-    "kmod-btusb"                       # 蓝牙 USB 驱动
     "bluez-daemon"                     # 蓝牙守护进程
     "kmod-input-uinput"                # 模拟用户输入模块（部分蓝牙外设依赖）
 )
