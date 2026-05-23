@@ -167,43 +167,63 @@ else
 fi
 uci commit network
 
-# 5. 智能大分区强制挂载保护 (适配 SATA/NVMe/虚拟机)
-ROOT_DISK=\$(lsblk -ndo NAME,TYPE | awk '\$2=="disk"{print \$1; exit}')
-if [ -n "\$ROOT_DISK" ]; then
-    ROOT_DEV="/dev/\$ROOT_DISK"
-    if [[ "\$ROOT_DISK" =~ [0-9]$ ]]; then
+# 5. 🎯 绝对数据安全的大分区强制挂载保护 (适配 SATA/NVMe)
+ROOT_DEV=""
+for dev in /dev/nvme0n1 /dev/sda /dev/vda /dev/mmcblk0; do
+    if [ -b "\$dev" ]; then
+        ROOT_DEV="\$dev"
+        break
+    fi
+done
+
+if [ -n "\$ROOT_DEV" ]; then
+    if [[ "\$ROOT_DEV" == *nvme* ]] || [[ "\$ROOT_DEV" == *mmcblk* ]]; then
         PART_DEV="\${ROOT_DEV}p3"
     else
         PART_DEV="\${ROOT_DEV}3"
     fi
 
+    # 第一重拦截：如果没有 sda3，才去解封 GPT 并创建分区
     if ! lsblk | grep -q "\${PART_DEV##*/}"; then
-        parted -s "\$ROOT_DEV" mkpart primary ext4 0% 100%
+        # 将 GPT 备份头移至物理硬盘真实末尾，解除小容量封印
+        sgdisk -e "\$ROOT_DEV" >/dev/null 2>&1
+        # 盲建第3分区：吃光剩下的所有空间
+        sgdisk -n 3:0:0 -t 3:8300 "\$ROOT_DEV" >/dev/null 2>&1
         partprobe "\$ROOT_DEV" >/dev/null 2>&1 || true
         sleep 3
-        if lsblk | grep -q "\${PART_DEV##*/}"; then
-            mkfs.ext4 -F "\$PART_DEV" >/dev/null 2>&1
-        fi
     fi
 
-    TARGET_UUID=\$(blkid -s UUID -o value "\$PART_DEV" 2>/dev/null)
-    if [ -n "\$TARGET_UUID" ]; then
-        echo "config 'global'" > /etc/config/fstab
-        echo "  option  anon_swap   '0'" >> /etc/config/fstab
-        echo "  option  anon_mount  '0'" >> /etc/config/fstab
-        echo "  option  auto_swap   '1'" >> /etc/config/fstab
-        echo "  option  auto_mount  '1'" >> /etc/config/fstab
-        echo "  option  delay_root  '5'" >> /etc/config/fstab
-        echo "  option  check_fs    '0'" >> /etc/config/fstab
+    if lsblk | grep -q "\${PART_DEV##*/}"; then
+        # 🛡️ 第二重终极护盾：嗅探底层是否有文件系统
+        FSTYPE=\$(blkid -s TYPE -o value "\$PART_DEV" 2>/dev/null)
         
-        uci add fstab mount
-        uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
-        uci set fstab.@mount[-1].target='/mnt/sda3'
-        uci set fstab.@mount[-1].enabled='1'
-        uci commit fstab
-        
-        mkdir -p /mnt/sda3
-        mount "\$PART_DEV" /mnt/sda3 2>/dev/null || true
+        # 只有当这个分区完全空白、没被格式化过时，才执行 mkfs (绝对不碰现有数据)
+        if [ -z "\$FSTYPE" ]; then
+            mkfs.ext4 -F "\$PART_DEV" >/dev/null 2>&1
+        fi
+
+        # 写入 fstab 实现开机自挂载
+        TARGET_UUID=\$(blkid -s UUID -o value "\$PART_DEV" 2>/dev/null)
+        if [ -n "\$TARGET_UUID" ]; then
+            echo "config 'global'" > /etc/config/fstab
+            echo "  option  anon_swap   '0'" >> /etc/config/fstab
+            echo "  option  anon_mount  '0'" >> /etc/config/fstab
+            echo "  option  auto_swap   '1'" >> /etc/config/fstab
+            echo "  option  auto_mount  '1'" >> /etc/config/fstab
+            echo "  option  delay_root  '5'" >> /etc/config/fstab
+            echo "  option  check_fs    '0'" >> /etc/config/fstab
+            
+            while uci -q delete fstab.@mount[0]; do :; done
+            
+            uci add fstab mount
+            uci set fstab.@mount[-1].uuid="\$TARGET_UUID"
+            uci set fstab.@mount[-1].target='/mnt/sda3'
+            uci set fstab.@mount[-1].enabled='1'
+            uci commit fstab
+            
+            mkdir -p /mnt/sda3
+            mount "\$PART_DEV" /mnt/sda3 2>/dev/null || true
+        fi
     fi
 fi
 
@@ -380,6 +400,7 @@ declare -a PKG_LIST=(
     "lsblk"                             # 块设备查看工具
     "parted"                            # 分区管理工具
     "fdisk"                             # 传统磁盘分区工具
+    "gdisk"                             # 🎯 新增: 破除 GPT 封印核心神器
     "e2fsprogs"                         # ext4 文件系统工具
     "kmod-usb-storage"                  # USB 存储核心驱动
     "kmod-usb-storage-uas"              # USB 高速传输驱动
@@ -397,10 +418,10 @@ declare -a PKG_LIST=(
     "jq"                                # JSON 解析工具
     "curl"                              # 网络请求工具
     "ca-bundle"                         # 根证书精简包
-    "ca-certificates"                   # [新增] 🔐 完整权威根证书库
-    "libustream-openssl"                # [新增] 🔐 让 opkg/apk 原生支持 HTTPS 下载
+    "ca-certificates"                   # 🔐 完整权威根证书库
+    "libustream-openssl"                # 🔐 让 opkg/apk 原生支持 HTTPS 下载
     "-wget"                             # [卸载] 阉割版 wget
-    "wget-ssl"                          # [新增] 🔐 支持 HTTPS 的完整版 wget
+    "wget-ssl"                          # 🔐 支持 HTTPS 的完整版 wget
     "libcap"                            # 权限控制库
     "libcap-bin"                        # 权限控制工具
     "ruby"                              # Ruby 运行环境
@@ -451,7 +472,7 @@ declare -a PKG_LIST=(
     # 🧩 8. 扩展应用插件
     "luci-app-ttyd"                     # 网页终端命令行
     "luci-i18n-ttyd-zh-cn"              # 网页终端中文包
-    "luci-app-samba4"                 # 兼容性极强的 Samba4
+    "luci-app-samba4"                   # 兼容性极强的 Samba4
     "luci-i18n-samba4-zh-cn"
     "wsdd2" 
     "luci-app-nlbwmon"                  # 网络带宽精准监控
