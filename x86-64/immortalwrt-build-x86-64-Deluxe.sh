@@ -22,7 +22,7 @@ echo "CONFIG_VDI_IMAGES=n" >> .config
 echo "CONFIG_VHDX_IMAGES=n" >> .config
 echo "CONFIG_QCOW2_IMAGES=n" >> .config
 echo "CONFIG_ISO_IMAGES=n" >> .config
-echo "CONFIG_GRUB_IMAGES=n" >> .config
+# echo "CONFIG_GRUB_IMAGES=n" >> .config
 
 echo "=== 2. 准备初始化文件夹 ==="
 mkdir -p files/etc/uci-defaults
@@ -395,8 +395,6 @@ echo "=== 5. 配置 ImmortalWrt 专属软件列表 ==="
 
 # --- 1. 核心系统与基础 UI ---
 PKG_CORE=(
-    "-dnsmasq"                         # 排除基础版 dnsmasq
-    "-dnsmasq-default"                 # 排除默认 dnsmasq 配置
     "dnsmasq-full"                     # 替换为全功能版（科学上网、透明代理必需支持）
     "luci"                             # 路由器 Web 管理后台主程序
     "luci-base"                        # Luci 基础依赖
