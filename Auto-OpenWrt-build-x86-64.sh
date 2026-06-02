@@ -283,6 +283,9 @@ declare -a PKG_LIST=(
     "kmod-fs-vfat"                      # FAT/FAT32 格式支持
 
     # ⚙️ 6. 核心底层依赖 (解决 opkg SSL/HTTPS 报错，代理插件所需)
+    "-libustream-mbedtls"               # [卸载] 自带的轻量级 SSL (防止与 openssl 冲突)
+    "-libustream-wolfssl"               # [卸载] 新版自带的 wolfssl (防患于未然)
+    "-kmod-btusb"                       # [卸载] 剔除报错缺失的蓝牙驱动，防止编译中断
     "coreutils-nohup"                   # 后台运行支持
     "bash"                              # 强大的终端 Shell
     "curl"                              # 网络请求下载工具
