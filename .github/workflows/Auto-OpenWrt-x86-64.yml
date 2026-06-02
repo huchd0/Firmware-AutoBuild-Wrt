@@ -4,7 +4,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # 读取面板输入定时任务自动运行，自动降级使用后面的默认值
   MANAGEMENT_IP: ${{ inputs.custom_ip || '192.168.100.1' }}
-  ROOTFS_SIZE: ${{ inputs.profile || '1024' }}
+  ROOTFS_SIZE: ${{ inputs.profile || '10240' }}
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ on:
       profile:
         description: 'RootFS 分区大小 (单位: MB)'
         required: true
-        default: '1024'
+        default: '10240'
         type: string
       custom_ip:
         description: '路由器管理地址 (仅填IP，无需加掩码)'
