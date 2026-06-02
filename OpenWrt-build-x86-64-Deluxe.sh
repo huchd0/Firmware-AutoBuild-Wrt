@@ -14,7 +14,7 @@ echo "=== 1. 自定义固件参数 (互刷保护) ==="
 echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
 echo "CONFIG_TARGET_ROOTFS_PARTSIZE=$ROOTFS_SIZE" >> .config
 
-# 极致优化：只生成 UEFI 的 squashfs 格式
+# 只生成 UEFI 的 squashfs 格式
 echo "CONFIG_TARGET_ROOTFS_EXT4FS=n" >> .config
 echo "CONFIG_TARGET_ROOTFS_TARGZ=n" >> .config
 echo "CONFIG_VMDK_IMAGES=n" >> .config
@@ -65,7 +65,7 @@ cat << 'EOF_WIFI' > files/etc/init.d/wifi-auto-patch
 START=99
 
 start() {
-    # 将探测和修改逻辑放进后台 ( ) & 执行，绝对不阻塞路由器开机速度
+    # 将探测和修改逻辑放进后台 ( ) & 执行，不阻塞路由器开机速度
     (
         WAIT=0
         while [ $WAIT -lt 30 ]; do
@@ -96,7 +96,7 @@ start() {
             
             uci commit wireless
             
-            # 【核心修复】强制重启无线服务，让 mywifi7 立刻生效！
+            # 重启无线服务，mywifi7 立刻生效
             sleep 2
             wifi reload
         fi
@@ -266,7 +266,7 @@ chmod +x files/etc/uci-defaults/99-custom-setup
 
 
 # ==========================================
-# --- E. 终端神器 ttyd 联网自动补装 (双引擎自适应版) ---
+# --- E. 终端 ttyd 补装 ---
 # ==========================================
 cat << 'EOF_TTYD' > files/etc/init.d/install-ttyd
 #!/bin/sh /etc/rc.common
@@ -296,11 +296,11 @@ mkdir -p files/etc/rc.d
 ln -s ../init.d/install-ttyd files/etc/rc.d/S99install-ttyd
 
 # ==========================================
-# --- F. 全自动静默升级与定时任务 (双引擎自适应版) ---
+# --- F. 全自动静默升级与定时任务 ---
 # ==========================================
 echo "正在生成自动升级脚本与定时任务..."
 
-# 🌟 创建目录
+# 创建目录
 mkdir -p files/usr/bin
 
 cat << 'EOF_UPGRADE' > files/usr/bin/upg
@@ -327,7 +327,7 @@ fi
 
 echo "使用 $PKG_ENGINE 引擎执行升级..." >> "$LOGFILE"
 
-# 2. 根据引擎执行相应的安全升级逻辑
+# 2. 根据引擎执行升级逻辑
 if [ "$PKG_ENGINE" = "apk" ]; then
     apk update >> "$LOGFILE" 2>&1
     # 获取可升级列表，提取包名并过滤掉敏感的内核与底层包
@@ -377,7 +377,7 @@ mkdir -p files/etc/crontabs
 echo "0 2 */2 * * /usr/bin/upg" > files/etc/crontabs/root
 echo "" >> files/etc/crontabs/root
 
-# 🎯 赋予 crontab 正确的安全权限 (600)，否则计划任务会失效
+# 赋予 crontab 正确的安全权限 (600)，否则计划任务会失效
 chmod 0600 files/etc/crontabs/root
 
 echo "=== 5. 配置 ImmortalWrt 专属软件列表 ==="
@@ -529,19 +529,19 @@ make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" EXTRA_IMAGE_NAME
 echo ">>> 7. 精准重命名与纯净提取 <<<"
 cd bin/targets/x86/64/
 
-# 1. 明确寻找那个唯一能刷机的 combined 固件
+# 1. 寻找刷机 combined 固件
 TARGET_FILE=$(ls *squashfs-combined-efi.img.gz 2>/dev/null | head -n 1)
 
 if [ -n "$TARGET_FILE" ]; then
-    # 2. 强行给它戴上 -Deluxe 的帽子
+    # 2. 加上 -Deluxe
     NEW_NAME="${TARGET_FILE%.img.gz}-Deluxe.img.gz"
     mv "$TARGET_FILE" "$NEW_NAME"
     echo "✅ 成功截获并重命名核心固件: $NEW_NAME"
 fi
 
-# 3. 暴力清场：把所有没被改成 Deluxe 的垃圾镜像（比如 rootfs 或 ext4 格式）全部删掉！
+# 3. 没被 Deluxe 的镜像全部删掉！
 find . -type f -name "*.img.gz" ! -name "*-Deluxe.img.gz" -delete
-# 顺手清理除了 Deluxe固件 和 sha256校验文件 之外的所有杂项
+# 清理除了 Deluxe固件 和 sha256校验文件 之外的所有杂项
 find . -type f -not -name "*-Deluxe.img.gz" -not -name "*sha256sums" -delete
 
 cd -
