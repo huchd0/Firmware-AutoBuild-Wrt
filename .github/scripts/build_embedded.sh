@@ -79,22 +79,12 @@ if [ "$BUILD_MODE" == "Lite" ]; then
     PKGS="$PKGS -luci-app-openclash -ppp -ppp-mod-pppoe -kmod-usb-core -kmod-usb3 -kmod-usb2"
 
 elif [ "$BUILD_MODE" == "Extroot" ]; then
-    echo ">>> 💾 [扩容模式] 注入 USB 驱动，配置容错与全自动装机逻辑..."
-    # ✅ 固件本底保留了 wpad (无线) 和 ppp (拨号)，仅剔除最大的 OpenClash
-    PKGS="$PKGS block-mount e2fsprogs kmod-fs-ext4 kmod-usb-core kmod-usb3 kmod-usb-storage fdisk"
-    PKGS="$PKGS -luci-app-openclash"
-    
-    # 💥 全自动扩容与后台装机脚本 (注入到路由器开机任务)
-    cat << 'EOF' > files/etc/uci-defaults/90-auto-extroot
-#!/bin/sh
-
-elif [ "$BUILD_MODE" == "Extroot" ]; then
     echo ">>> 💾 [扩容模式] 注入存储驱动与新版装机逻辑..."
-    # 新增 kmod-mmc-mtk，兼容京东云等内置 TF/eMMC 卡槽的设备
+    # 兼容京东云等内置 TF/eMMC 卡槽的设备
     PKGS="$PKGS block-mount e2fsprogs kmod-fs-ext4 kmod-usb-core kmod-usb3 kmod-usb-storage kmod-mmc-mtk kmod-sdhci-mt7620 fdisk"
     PKGS="$PKGS -luci-app-openclash"
     
-    # 💥 全自动扩容与后台装机脚本 (注入到路由器开机任务)
+    # 💥 全自动扩容与后台装机脚本
     cat << 'EOF' > files/etc/uci-defaults/90-auto-extroot
 #!/bin/sh
 
@@ -108,7 +98,7 @@ if df /overlay | grep -qE "/dev/sd|/dev/mmcblk"; then
                 if ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then
                     logger -t Extroot "🌐 网络就绪！正在识别包管理器并下载豪华插件..."
                     
-                    # 🛠️ 智能兼容：25.12+ 采用 apk，旧版采用 opkg
+                    # 智能双包管理器兼容 (25.12+ 用 apk)
                     if command -v apk >/dev/null; then
                         apk update
                         apk add luci-theme-argon luci-app-argon-config luci-app-upnp luci-app-autoreboot curl luci-app-openclash
@@ -142,7 +132,6 @@ fi
 
 # 2. 扩容检测：如果在内置 16M 运行，寻找外接 U 盘或内置 TF 卡
 sleep 15
-# 优先寻找外挂 U 盘 (sd)，其次寻找内置 SD/eMMC 卡 (mmcblk)
 DEVICE=$(block info | grep -oE "/dev/sd[a-z][0-9]+|/dev/mmcblk[0-9]+p[0-9]+" | head -n 1)
 
 if [ -n "$DEVICE" ]; then
@@ -153,10 +142,9 @@ if [ -n "$DEVICE" ]; then
     mount "$DEVICE" /mnt/extroot
     tar -C /overlay -cvf - . | tar -C /mnt/extroot -xf -
     
-    # 🔑 修复致命 Bug：放弃随机的 mount[0]，使用 UUID 绝对挂载
+    # 绝对路径挂载，杜绝挂载错乱
     UUID=$(block info "$DEVICE" | grep -oE 'UUID="[^"]+"' | cut -d'"' -f2)
     
-    # 安全地创建指定的自定义挂载块
     uci -q delete fstab.extroot
     uci set fstab.extroot="mount"
     uci set fstab.extroot.uuid="$UUID"
