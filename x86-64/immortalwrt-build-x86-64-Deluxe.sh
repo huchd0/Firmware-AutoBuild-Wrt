@@ -47,15 +47,20 @@ wget -qO files/lib/firmware/mediatek/mt7925/BT_RAM_CODE_MT7925_1_1_hdr.bin "http
 wget -qO files/lib/firmware/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin"
 wget -qO files/lib/firmware/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/53539c0625c5dbdd2308146e3435f06b51f68c01/mediatek/mt7925/WIFI_RAM_CODE_MT7925_1_1.bin"
 
-# 抓取 NetWiz 网络向导最新版
-PKG_EXT="apk"
-echo "正在获取 NetWiz 组件..."
+# 抓取 NetWiz 网络向导
+echo "正在拉取 NetWiz (apk与ipk全量双格式) ..."
 mkdir -p files/root/netwiz_pkgs
-curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
-jq -r ".assets[] | select(.name | endswith(\".${PKG_EXT}\")) | .browser_download_url" | \
-while read -r url; do
-    echo "拉取 $url"
-    wget -qP files/root/netwiz_pkgs/ "$url"
+BASE_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
+
+for FILE in \
+    apk_luci-app-netwiz.apk \
+    apk_luci-i18n-netwiz-zh-cn.apk \
+    apk_luci-i18n-netwiz-zh-tw.apk \
+    ipk_luci-app-netwiz.ipk \
+    ipk_luci-i18n-netwiz-zh-cn.ipk \
+    ipk_luci-i18n-netwiz-zh-tw.ipk
+do
+    wget -qP files/root/netwiz_pkgs/ "$BASE_URL/$FILE"
 done
 
 echo "=== 4. 编写全自动开机初始化脚本 ==="
@@ -247,16 +252,24 @@ if uci get luci.themes.Argon >/dev/null 2>&1; then
     uci commit luci
 fi
 
-# 本地插件自动静默安装
+# --- 安装本地 NetWiz 插件并刷新界面缓存 ---
 if [ -d "/root/netwiz_pkgs" ]; then
-    echo "Installing NetWiz locally..." > /dev/kmsg
+    echo "=== 开始安装 NetWiz ===" > /root/netwiz_install.log
+    
+    # 1. 暴力强装
     if command -v apk >/dev/null 2>&1; then
-        apk add --allow-untrusted /root/netwiz_pkgs/*.apk
+        apk add --allow-untrusted /root/netwiz_pkgs/*.apk >> /root/netwiz_install.log 2>&1
     elif command -v opkg >/dev/null 2>&1; then
-        opkg install /root/netwiz_pkgs/*.ipk
+        opkg install /root/netwiz_pkgs/*.ipk --force-depends >> /root/netwiz_install.log 2>&1 || true
     fi
-    # 安装完自我清理，释放固件空间
+    
+    # 2. 清理 LuCI 缓存并重载守护进程，显示菜单
+    rm -rf /tmp/luci-indexcache /tmp/luci-modulecache/ /var/run/luci-indexcache /var/run/luci-modulecache/ 2>/dev/null
+    /etc/init.d/rpcd reload 2>/dev/null
+    
+    # 3. 阅后即焚
     rm -rf /root/netwiz_pkgs
+    echo "=== 安装流程结束 ===" >> /root/netwiz_install.log
 fi
 
 rm -f /etc/uci-defaults/99-custom-setup
