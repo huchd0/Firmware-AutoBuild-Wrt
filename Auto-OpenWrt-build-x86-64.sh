@@ -2,7 +2,7 @@
 set -e
 
 # 接收 GitHub Actions 传来的环境变量 (支持本地独立运行时的默认值)
-ROOTFS_SIZE=${ROOTFS_SIZE:-1024}
+ROOTFS_SIZE=${ROOTFS_SIZE:-10240}
 MANAGEMENT_IP=${MANAGEMENT_IP:-192.168.100.1}
 
 if [[ ! "$MANAGEMENT_IP" == *"/"* ]]; then
