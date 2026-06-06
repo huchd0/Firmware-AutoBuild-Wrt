@@ -51,7 +51,7 @@ FW_URL="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.
     
     BASE_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
     
-    # 精准拉取你指定的 6 个文件
+    # 精准拉取指定的 6 个文件
     for FILE in \
         apk_luci-app-netwiz.apk \
         apk_luci-i18n-netwiz-zh-cn.apk \
