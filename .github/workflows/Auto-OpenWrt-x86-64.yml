@@ -52,9 +52,10 @@ jobs:
           # 1. 抓取官方下载服务器的真实发版目录
           OFFICIAL_LATEST=$(curl -sL https://downloads.openwrt.org/releases/ | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?' | sort -Vu | tail -n 1)
           
-          # 2. 获取本地最后发布 (兼容 rc 版本的正则匹配)
-          MY_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | grep '"name":' | grep 'OpenWrt' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?' | head -n 1 || echo "0.0.0")
-
+          # 2. 获取本地最后发布
+          MY_LATEST=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | grep '"name":' | grep '每日检测' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?' | sort -V | tail -n 1 || true)
+          [ -z "$MY_LATEST" ] && MY_LATEST="0.0.0"
+          
           # 控制台直观日志输出
           echo "========================================"
           echo "官方最新版本: $OFFICIAL_LATEST"
