@@ -13,8 +13,8 @@ on:
         type: choice
         options:
           - 'latest'
-          - '25.12.0-rc1'
-          - '24.10.6'
+          - '25.12.4'
+          - '24.10.7'
       profile:
         description: 'RootFS 分区大小 (单位: MB)'
         required: true
@@ -47,7 +47,7 @@ jobs:
             # 🎯 修复 2：终极保底机制，如果 API 依然抽风没抓到，强制给定一个最新稳定版，坚决不让它为空！
             if [ -z "$LATEST_VER" ]; then
                 echo "⚠️ 警告：无法从 API 获取最新版本，触发保底机制！"
-                LATEST_VER="23.05.4"  # 如果你用的是 24.x，可以把这里改成 24.10.0
+                LATEST_VER="25.12.4"
             fi
             
             echo "🎉 成功锁定版本: $LATEST_VER"
