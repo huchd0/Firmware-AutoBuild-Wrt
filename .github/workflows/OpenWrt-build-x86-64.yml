@@ -34,23 +34,26 @@ jobs:
       - name: Checkout 代码
         uses: actions/checkout@v4
 
-      - name: 🌟 智能获取/设定 OpenWrt 版本号
+      - name: 🌟 暴力抓取绝对最新 OpenWrt 版本号
         id: get_version
         run: |
           INPUT_VER="${{ inputs.openwrt_version }}"
           if [ -z "$INPUT_VER" ] || [ "$INPUT_VER" == "latest" ]; then
-            echo "检测到 latest 选项，正在查询官方最新稳定版..."
+            echo "检测到 latest 选项，正在绕过官方 API，暴力读取底层 Git 标签..."
             
-            # 🎯 修复 1：加上 GITHUB_TOKEN，突破 API 匿名访问的限速封锁
-            LATEST_VER=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/openwrt/openwrt/releases" | grep '"tag_name":' | grep -v 'rc' | head -n 1 | cut -d '"' -f 4 | sed 's/v//')
+            # 利用 Git 底层协议读取所有标签，纯数学排查最高版本！
+            # 1. git ls-remote: 绕过所有 API 限速，直接向 OpenWrt 源码仓库要数据。
+            # 2. grep: 严格过滤，彻底剔除带 rc 的测试版和非版本号的乱码。
+            # 3. sort -V: Linux 神级命令“版本号排序”，自动把 25.x 排在 24.x 后面。
+            # 4. tail -n 1: 无脑拿排在最后面的那个绝对最大值！
+            LATEST_VER=$(git ls-remote --tags https://github.com/openwrt/openwrt.git | awk -F/ '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 | sed 's/v//')
             
-            # 🎯 修复 2：终极保底机制，如果 API 依然抽风没抓到，强制给定一个最新稳定版，坚决不让它为空！
             if [ -z "$LATEST_VER" ]; then
-                echo "⚠️ 警告：无法从 API 获取最新版本，触发保底机制！"
+                echo "⚠️ 警告：极端网络异常导致抓取失败，触发保底机制！"
                 LATEST_VER="25.12.4"
             fi
             
-            echo "🎉 成功锁定版本: $LATEST_VER"
+            echo "🎉 成功锁定全网绝对最高版本: $LATEST_VER"
             echo "OWRT_VERSION=$LATEST_VER" >> $GITHUB_ENV
           else
             echo "使用手动指定的版本: $INPUT_VER"
