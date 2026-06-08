@@ -393,7 +393,9 @@ declare -a PKG_LIST=(
     "kmod-fs-exfat"                     # exfat 驱动
     "luci-i18n-filemanager-zh-cn"       # 文件管理中文包
 
-    # 核心系统运行依赖
+    # 核心系统运行依赖    
+    "-libustream-mbedtls"               # 剔除衝突的 mbedtls 庫
+    "-libustream-wolfssl"               # 剔除衝突的 wolfssl 庫
     "coreutils-nohup"                   # 后台运行支持
     "coreutils-base64"                  # Base64 编码
     "coreutils-sort"                    # 排序工具
@@ -431,9 +433,6 @@ declare -a PKG_LIST=(
     "wpad-openssl"                      # 安装完整版 WPA3 认证
     "kmod-mt7925e"                      # MT7925 PCIe 驱动
     "kmod-mt7925-firmware"              # MT7925 固件支持
-    "kmod-btusb"                        # 蓝牙 USB 底层驱动
-    "bluez-daemon"                      # 蓝牙协议栈守护
-    "kmod-input-uinput"                 # 蓝牙输入设备驱动
 
     # 系统监控与排障工具
     "nano"                              # 文本编辑器
