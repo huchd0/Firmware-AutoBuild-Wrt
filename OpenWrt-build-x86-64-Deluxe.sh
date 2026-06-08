@@ -50,7 +50,7 @@ fi
 PKG_EXT="apk"
 echo "正在获取 NetWiz 组件"
 mkdir -p files/root/netwiz_pkgs
-curl -sL https://api.github.com/repos/sdxmhs/luci-app-netwiz/releases/latest | \
+curl -sL https://api.github.com/repos/huchd0/luci-app-netwiz/releases/latest | \
 jq -r ".assets[] | select(.name | endswith(\".${PKG_EXT}\")) | .browser_download_url" | \
 while read -r url; do
     echo "拉取 $url"
