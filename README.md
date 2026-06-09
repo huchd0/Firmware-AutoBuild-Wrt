@@ -57,12 +57,12 @@
    [【netwiz】](https://github.com/huchd0/luci-app-netwiz)提供了一键智能安装脚本。无论老系统还是新系统，只需在 SSH 终端中直接复制并执行以下单行命令，即可自动完成【判断系统 -> 下载 -> 安装 -> 清理缓存】的全流程：
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh | sh
+if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
 ```
 
-💡 提示：如果你的网络无法直接访问 GitHub Raw，可以在链接前加上镜像代理，例如：
+💡 **提示**：如果你的网络无法直接访问 GitHub Raw，可以在链接前加上代理加速，例如：
 ```bash
-wget -qO- https://ghproxy.net/https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh | sh
+if wget -qO /tmp/nw_inst.sh https://ghproxy.net/https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
 ```
 
 # OpenWrt 软件包搜索引擎：
