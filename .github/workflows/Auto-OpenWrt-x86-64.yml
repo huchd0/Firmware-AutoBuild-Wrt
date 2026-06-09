@@ -188,8 +188,8 @@ jobs:
           echo ">>> 2. 清理多余的“无需更新”记录 <<<"
           gh run list --workflow "${{ github.workflow }}" --status success --limit 100 --json databaseId,createdAt,updatedAt > runs.json
 
-          # 提取运行时间小于 300 秒 (5分钟) 的跳过记录，保留最近 2 个，其余删除
-          TO_DELETE=$(jq -r '[.[] | select((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601) < 300)] | .[2:] | .[].databaseId' runs.json)
+          # 提取运行时间小于 600 秒 (10分钟) 的跳过记录，保留最近 2 个，其余删除
+          TO_DELETE=$(jq -r '[.[] | select((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601) < 600)] | .[2:] | .[].databaseId' runs.json)
           
           if [ -n "$TO_DELETE" ]; then
             for run_id in $TO_DELETE; do
