@@ -16,9 +16,9 @@ on:
         type: choice
         options:
           - 'latest'
-          - '24.10.0-rc3'
-          - '23.05.5'
-          - '23.05.4'
+          - '25.12.4'
+          - '24.10.7'
+          - '23.05.6'
       profile:
         description: 'RootFS 分区大小 (单位: MB)'
         required: true
